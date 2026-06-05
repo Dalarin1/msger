@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Oleg Chat</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+
+:root {
+    --bg: #f8f9fa;
+    --card: #ffffff;
+    --text: #202124;
+    --secondary: #5f6368;
+    --border: #e8eaed;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: Inter, sans-serif;
+    background: var(--bg);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+header {
+    background: white;
+    border-bottom: 1px solid var(--border);
+    padding: 18px 24px;
+    font-size: 20px;
+    font-weight: 600;
+}
+
+#messages {
+    flex: 1;
+    overflow-y: auto;
+    max-width: 900px;
+    width: 100%;
+    margin: auto;
+    padding: 24px;
+}
+
+.message {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 14px 18px;
+    margin-bottom: 12px;
+}
+
+.message-header {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 6px;
+}
+
+.sender {
+    font-weight: 600;
+}
+
+.time {
+    color: #777;
+    font-size: 13px;
+}
+
+.text {
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.5;
+}
+
+.input-wrapper {
+    background: white;
+    border-top: 1px solid var(--border);
+    padding: 16px;
+}
+
+.input-container {
+    max-width: 900px;
+    margin: auto;
+    display: flex;
+    gap: 12px;
+}
+
+input {
+    flex: 1;
+    border: 1px solid var(--border);
+    border-radius: 24px;
+    padding: 14px 18px;
+    outline: none;
+    font-size: 15px;
+}
+
+button {
+    border: none;
+    border-radius: 24px;
+    background: black;
+    color: white;
+    padding: 0 24px;
+    cursor: pointer;
+}
+
+#status {
+    color: #777;
+    font-size: 13px;
+    margin-left: 10px;
+}
+
+</style>
+</head>
+<body>
+
+<header>
+    Oleg Chat
+    <span id="status">подключение...</span>
+</header>
+
+<div id="messages"></div>
+
+<div class="input-wrapper">
+    <div class="input-container">
+        <input
+            id="msg"
+            placeholder="Сообщение..."
+            autocomplete="off"
+        >
+        <button onclick="sendMessage()">
+            Отправить
+        </button>
+    </div>
+</div>
+
+<script>
+
+const messagesEl = document.getElementById("messages");
+const statusEl = document.getElementById("status");
+const inputEl = document.getElementById("msg");
+
+const myName =
+    localStorage.getItem("chat_name")
+    || prompt("Ваше имя") || "Anonymous";
+
+localStorage.setItem("chat_name", myName);
+
+function escapeHtml(str) {
+    return str
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;");
+}
+
+function addMessage(msg) {
+
+    const div = document.createElement("div");
+    div.className = "message";
+
+    const date =
+        new Date(msg.timestamp)
+        .toLocaleString();
+
+    div.innerHTML = `
+        <div class="message-header">
+            <span class="sender">
+                ${escapeHtml(msg.sender)}
+            </span>
+
+            <span class="time">
+                ${date}
+            </span>
+        </div>
+
+        <div class="text">
+            ${escapeHtml(msg.text)}
+        </div>
+    `;
+
+    messagesEl.appendChild(div);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+const protocol =
+    location.protocol === "https:"
+        ? "wss"
+        : "ws";
+
+const ws = new WebSocket(
+    `${protocol}://${location.host}/ws`
+);
+
+ws.onopen = () => {
+    statusEl.textContent = "онлайн";
+};
+
+ws.onclose = () => {
+    statusEl.textContent = "отключено";
+};
+
+ws.onerror = () => {
+    statusEl.textContent = "ошибка";
+};
+
+ws.onmessage = event => {
+
+    const data = JSON.parse(event.data);
+
+    if (data.type === "history") {
+
+        messagesEl.innerHTML = "";
+
+        for (const msg of data.messages)
+            addMessage(msg);
+
+    }
+
+    else if (data.type === "message") {
+
+        addMessage(data.message);
+
+    }
+};
+
+function sendMessage() {
+
+    const text = inputEl.value.trim();
+
+    if (!text)
+        return;
+
+    ws.send(JSON.stringify({
+        sender: myName,
+        text: text
+    }));
+
+    inputEl.value = "";
+}
+
+inputEl.addEventListener("keydown", e => {
+    if (e.key === "Enter")
+        sendMessage();
+});
+
+</script>
+
+</body>
+</html>
