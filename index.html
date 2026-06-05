@@ -124,7 +124,7 @@ function add(msg) {
 
     div.innerHTML = `
         <div class="meta">
-            ${msg.sender} · ${new Date(msg.timestamp).toLocaleString()}
+            <span class="sender-link" onclick="location.href='/chat?with=${msg.sender_id}'">${msg.sender}</span>
         </div>
         <div class="text">${escapeHtml(msg.text)}</div>
     `;
@@ -220,7 +220,7 @@ async function send() {
 
 input.addEventListener("keydown", e => {
     document.querySelector("button").addEventListener("click", send);
-    
+
     if (e.key === "Enter") send();
 });
 
