@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Voice Chat</title>
+</head>
+<body>
+<h2>Voice Chat</h2>
+<input id="room" placeholder="room id">
+<button id="joinBtn">Join</button>
+<div id="status"></div>
+
+<script src="/socket.io.min.js"></script>
+<script>
+const socket = io();
+let pc = null;
+let localStream = null;
+let room = null;
+let pendingCandidates = [];
+let joined = false;
+
+const config = {
+    iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+};
+
+function setStatus(msg) {
+    document.getElementById("status").textContent = msg;
+    console.log(msg);
+}
+
+document.getElementById("joinBtn").addEventListener("click", joinRoom);
+
+socket.on("connect", () => setStatus("Connected to server"));
+
+socket.on("room-state", (data) => {
+    setStatus("Users in room: " + data.count);
+});
+
+socket.on("user-joined", async () => {
+    setStatus("New user joined, creating offer...");
+    if (!pc) createPeer();
+    try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        socket.emit("signal", { room, sdp: offer });
+    } catch (e) {
+        console.error("Offer error", e);
+    }
+});
+
+socket.on("signal", async (data) => {
+    console.log("SIGNAL RECEIVED", data.sdp ? data.sdp.type : "candidate");
+    if (!pc) createPeer();
+
+    if (data.sdp) {
+        await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+
+        for (const c of pendingCandidates) {
+            try { await pc.addIceCandidate(new RTCIceCandidate(c)); }
+            catch (e) { console.log("ICE replay error", e); }
+        }
+        pendingCandidates = [];
+
+        if (data.sdp.type === "offer") {
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            socket.emit("signal", { room, sdp: answer });
+        }
+    }
+
+    if (data.candidate) {
+        if (!pc.remoteDescription || !pc.remoteDescription.type) {
+            pendingCandidates.push(data.candidate);
+            return;
+        }
+        try { await pc.addIceCandidate(new RTCIceCandidate(data.candidate)); }
+        catch (e) { console.log("ICE ERROR", e); }
+    }
+});
+
+function createPeer() {
+    if (pc) pc.close();
+    pc = new RTCPeerConnection(config);
+    pendingCandidates = [];
+
+    pc.onicecandidate = (e) => {
+        if (e.candidate) {
+            socket.emit("signal", { room, candidate: e.candidate });
+        }
+    };
+
+    pc.onconnectionstatechange = () => {
+        setStatus("WebRTC: " + pc.connectionState);
+    };
+
+    pc.ontrack = (e) => {
+        setStatus("Audio received!");
+        const existing = document.getElementById("remote-audio");
+        const audio = existing || document.createElement("audio");
+        audio.id = "remote-audio";
+        audio.srcObject = e.streams[0];
+        audio.autoplay = true;
+        audio.controls = true;
+        if (!existing) document.body.appendChild(audio);
+        audio.play().catch(err => console.log("play error", err));
+    };
+
+    if (localStream) {
+        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+    }
+}
+
+async function joinRoom() {
+    if (joined) return;
+    room = document.getElementById("room").value.trim();
+    if (!room) { alert("Enter a room id"); return; }
+
+    try {
+        localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        setStatus("Microphone OK, joining room...");
+    } catch (err) {
+        console.error("MIC ERROR", err);
+        alert("Microphone error: " + err.message);
+        return;
+    }
+
+    joined = true;
+    createPeer();
+    socket.emit("join", { room });
+}
+</script>
+</body>
+</html>
