@@ -7,16 +7,24 @@
 <h2>Voice Chat</h2>
 <input id="room" placeholder="room id">
 <button id="joinBtn">Join</button>
+<button id="camBtn" disabled>📷 Включить вебку</button>
 <div id="status"></div>
+
+<div id="videos" style="display:flex; gap:10px; margin-top:10px; flex-wrap:wrap;">
+    <video id="localVideo" autoplay muted playsinline style="width:320px; background:#000; display:none;"></video>
+    <video id="remoteVideo" autoplay playsinline style="width:320px; background:#000; display:none;"></video>
+</div>
 
 <script src="/socket.io.min.js"></script>
 <script>
 const socket = io();
 let pc = null;
 let localStream = null;
+let localVideoStream = null;
 let room = null;
 let pendingCandidates = [];
 let joined = false;
+let videoEnabled = false;
 
 const config = {
     iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
@@ -28,6 +36,7 @@ function setStatus(msg) {
 }
 
 document.getElementById("joinBtn").addEventListener("click", joinRoom);
+document.getElementById("camBtn").addEventListener("click", toggleCamera);
 
 socket.on("connect", () => setStatus("Connected to server"));
 
@@ -93,15 +102,23 @@ function createPeer() {
     };
 
     pc.ontrack = (e) => {
-        setStatus("Audio received!");
-        const existing = document.getElementById("remote-audio");
-        const audio = existing || document.createElement("audio");
-        audio.id = "remote-audio";
-        audio.srcObject = e.streams[0];
-        audio.autoplay = true;
-        audio.controls = true;
-        if (!existing) document.body.appendChild(audio);
-        audio.play().catch(err => console.log("play error", err));
+        const stream = e.streams[0];
+        if (e.track.kind === "audio") {
+            setStatus("Audio received!");
+            const existing = document.getElementById("remote-audio");
+            const audio = existing || document.createElement("audio");
+            audio.id = "remote-audio";
+            audio.srcObject = stream;
+            audio.autoplay = true;
+            if (!existing) document.body.appendChild(audio);
+            audio.play().catch(err => console.log("play error", err));
+        }
+        if (e.track.kind === "video") {
+            setStatus("Video received!");
+            const remoteVideo = document.getElementById("remoteVideo");
+            remoteVideo.srcObject = stream;
+            remoteVideo.style.display = "block";
+        }
     };
 
     if (localStream) {
@@ -126,6 +143,60 @@ async function joinRoom() {
     joined = true;
     createPeer();
     socket.emit("join", { room });
+    document.getElementById("camBtn").disabled = false;
+}
+
+async function toggleCamera() {
+    const btn = document.getElementById("camBtn");
+    const localVideo = document.getElementById("localVideo");
+
+    if (!videoEnabled) {
+        try {
+            localVideoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+            localVideo.srcObject = localVideoStream;
+            localVideo.style.display = "block";
+
+            // добавляем видеотрек в существующий peer connection
+            const videoTrack = localVideoStream.getVideoTracks()[0];
+            if (pc) {
+                pc.addTrack(videoTrack, localVideoStream);
+                // переговорка нужна — отправляем новый оффер
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                socket.emit("signal", { room, sdp: offer });
+            }
+
+            videoEnabled = true;
+            btn.textContent = "⛔ Выключить вебку";
+            setStatus("Camera ON");
+        } catch (err) {
+            console.error("CAM ERROR", err);
+            alert("Camera error: " + err.message);
+        }
+    } else {
+        // останавливаем треки
+        if (localVideoStream) {
+            localVideoStream.getTracks().forEach(t => t.stop());
+            localVideoStream = null;
+        }
+        localVideo.srcObject = null;
+        localVideo.style.display = "none";
+
+        // убираем видеосендеры из pc
+        if (pc) {
+            pc.getSenders()
+                .filter(s => s.track && s.track.kind === "video")
+                .forEach(s => pc.removeTrack(s));
+
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            socket.emit("signal", { room, sdp: offer });
+        }
+
+        videoEnabled = false;
+        btn.textContent = "📷 Включить вебку";
+        setStatus("Camera OFF");
+    }
 }
 </script>
 </body>
