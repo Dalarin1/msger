@@ -1,0 +1,7 @@
+.dockerignore
+/global_chat
+/personal_chats
+/database
+/voice
+.gitignore
+dockerfile

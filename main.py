@@ -15,16 +15,30 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 app = fastapi.FastAPI()
 
 HEAD = "OLEG.TXT"
-GLOBAL_CHAT_FOLDER = os.path.join(os.curdir, "global_chat")
-P2P_CHATS_FOLDER = os.path.join(os.curdir, "personal_chats")
-conn = sqlite3.connect("members.db")
-cursor = conn.cursor()
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+GLOBAL_CHAT_FOLDER = os.path.join(BASE_DIR, "global_chat")
+P2P_CHATS_FOLDER = os.path.join(BASE_DIR, "personal_chats")
+DATABASE_FOLDER = os.path.join(BASE_DIR, "database")
+
+members_db_path = os.path.join(DATABASE_FOLDER, "members.db")
+conn = None
+cursor = None
 clients = []
 
 
 def make_environ() -> None:
+    global conn, cursor
+
     if os.name == "nt":
         os.system("")
+
+    os.makedirs(DATABASE_FOLDER, exist_ok=True)
+    os.makedirs(GLOBAL_CHAT_FOLDER, exist_ok=True)
+    os.makedirs(P2P_CHATS_FOLDER, exist_ok=True)
+
+    conn = sqlite3.connect(members_db_path, check_same_thread=False)
+    cursor = conn.cursor()
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS members (
@@ -34,16 +48,19 @@ def make_environ() -> None:
     )""")
 
     conn.commit()
+    # Новая таблица — добавить в make_environ()
 
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS chats (
+        chat_id TEXT,
+        user_id TEXT,
+        other_id TEXT,
+        PRIMARY KEY (chat_id, user_id)
+    )""")
+    conn.commit()
     if not os.path.exists(HEAD):
         with open(HEAD, "w") as f:
             f.write("")
-    
-    if not os.path.exists(GLOBAL_CHAT_FOLDER):
-        os.mkdir(GLOBAL_CHAT_FOLDER)
-
-    if not os.path.exists(P2P_CHATS_FOLDER):
-        os.mkdir(P2P_CHATS_FOLDER)
 
 
 def get_last_global_msg_hash() -> str:
@@ -55,6 +72,103 @@ def get_last_global_msg_hash() -> str:
             return ""
 
 
+def get_history(limit=100):
+    msgs = []
+
+    if not os.path.exists(HEAD):
+        return msgs
+
+    curhash = get_last_global_msg_hash()
+    while len(msgs) < limit:
+        if not curhash:
+            break
+        if not os.path.exists(os.path.join(GLOBAL_CHAT_FOLDER, curhash)):
+            break
+        with open(os.path.join(GLOBAL_CHAT_FOLDER, curhash), "r") as f:
+            data = json.load(f)
+        msgs.append(data)
+        curhash = data.get("prev", "").strip()
+    msgs.reverse()
+    return msgs
+
+
+p2p_clients: dict[str, list[WebSocket]] = {}
+
+def get_chat_dir(chat_id: str) -> str:
+    return os.path.join(P2P_CHATS_FOLDER, chat_id)
+
+
+def get_p2p_history(chat_id: str, limit: int = 100) -> list:
+    msgs = []
+    dirpath = get_chat_dir(chat_id)
+    headpath = os.path.join(dirpath, "head.txt")
+
+    if not os.path.exists(headpath):
+        return msgs
+
+    with open(headpath, "r") as f:
+        curhash = f.readline().strip()
+
+    while len(msgs) < limit:
+        if not curhash:
+            break
+
+        msgpath = os.path.join(dirpath, curhash)
+        if not os.path.exists(msgpath):
+            break
+
+        with open(msgpath, "r") as f:
+            data = json.load(f)
+
+        msgs.append(data)
+        curhash = data.get("prev", "").strip()
+
+    msgs.reverse()
+    return msgs
+
+
+# make_chat() — дописать сохранение участников
+def make_chat(id_1: str, id_2: str) -> str:
+    key = "".join(sorted([id_1, id_2]))
+    chat_id = hashlib.sha1(key.encode()).hexdigest()
+    dirpath = get_chat_dir(chat_id)
+
+    if not os.path.exists(dirpath):
+        os.makedirs(dirpath)
+        with open(os.path.join(dirpath, "head.txt"), "w") as f:
+            f.write("")
+
+    # Записываем обоих участников
+    cursor.execute(
+        "INSERT OR IGNORE INTO chats (chat_id, user_id, other_id) VALUES (?, ?, ?)",
+        (chat_id, id_1, id_2),
+    )
+    cursor.execute(
+        "INSERT OR IGNORE INTO chats (chat_id, user_id, other_id) VALUES (?, ?, ?)",
+        (chat_id, id_2, id_1),
+    )
+    conn.commit()
+
+    return chat_id
+
+
+@app.get("/", response_class=HTMLResponse)
+async def get_index():
+    return HTMLResponse(open("index.html").read())
+
+
+@app.get("/chat", response_class=HTMLResponse)
+async def get_chat_html():
+    return HTMLResponse(open("chat.html").read())
+@app.get("/chat/", response_class=HTMLResponse)
+async def get_chat_html_2():
+    return HTMLResponse(open("chat.html").read())
+
+@app.get("/profile", response_class=HTMLResponse)
+async def get_profile_html():
+    return HTMLResponse(open("profile.html").read())
+
+
 @app.get("/register")
 async def register(reqv: fastapi.Request, name: str):
     new_id = str(uuid.uuid4())
@@ -64,34 +178,6 @@ async def register(reqv: fastapi.Request, name: str):
     )
     conn.commit()
     return {"id": new_id, "name": name}
-
-
-def get_history(limit=100):
-    msgs = []
-
-    if not os.path.exists(HEAD):
-        return msgs
-
-    curhash = get_last_global_msg_hash()
-
-    while len(msgs) < limit:
-
-        if not curhash:
-            break
-
-        if not os.path.exists(os.path.join(GLOBAL_CHAT_FOLDER, curhash)):
-            break
-
-        with open(os.path.join(GLOBAL_CHAT_FOLDER, curhash), "r") as f:
-            data = json.load(f)
-
-        msgs.append(data)
-
-        curhash = data.get("prev", "").strip()
-
-    msgs.reverse()
-
-    return msgs
 
 
 @app.get("/send_msg")
@@ -167,64 +253,6 @@ async def websocket_endpoint(ws: WebSocket):
             clients.remove(ws)
 
 
-@app.get("/", response_class=HTMLResponse)
-async def get_index():
-
-    path = Path(__file__).parent / "index.html"
-
-    return path.read_text(encoding="utf-8")
-
-# chat_id -> list of websockets
-p2p_clients: dict[str, list[WebSocket]] = {}
-
-
-def get_chat_dir(chat_id: str) -> str:
-    return os.path.join(P2P_CHATS_FOLDER, chat_id)
-
-
-def get_p2p_history(chat_id: str, limit: int = 100) -> list:
-    msgs = []
-    dirpath = get_chat_dir(chat_id)
-    headpath = os.path.join(dirpath, "head.txt")
-
-    if not os.path.exists(headpath):
-        return msgs
-
-    with open(headpath, "r") as f:
-        curhash = f.readline().strip()
-
-    while len(msgs) < limit:
-        if not curhash:
-            break
-
-        msgpath = os.path.join(dirpath, curhash)
-        if not os.path.exists(msgpath):
-            break
-
-        with open(msgpath, "r") as f:
-            data = json.load(f)
-
-        msgs.append(data)
-        curhash = data.get("prev", "").strip()
-
-    msgs.reverse()
-    return msgs
-
-
-def make_chat(id_1: str, id_2: str) -> str:
-    # детерминированный chat_id — одинаковый для обоих порядков
-    key = "".join(sorted([id_1, id_2]))
-    chat_id = hashlib.sha1(key.encode()).hexdigest()
-    dirpath = get_chat_dir(chat_id)
-
-    if not os.path.exists(dirpath):
-        os.makedirs(dirpath)
-        with open(os.path.join(dirpath, "head.txt"), "w") as f:
-            f.write("")
-
-    return chat_id
-
-
 @app.get("/chat/open")
 async def open_chat(with_id: str, request: fastapi.Request):
     """Создаёт (или находит существующий) чат между двумя юзерами, возвращает chat_id"""
@@ -240,8 +268,57 @@ async def open_chat(with_id: str, request: fastapi.Request):
     return {"chat_id": chat_id}
 
 
+# Новый эндпоинт
+@app.get("/my/chats")
+async def my_chats(request: fastapi.Request):
+    my_id = request.headers.get("X-User-Id")
+    if not my_id:
+        raise fastapi.HTTPException(status_code=400, detail="Missing X-User-Id header")
+
+    rows = cursor.execute(
+        """
+        SELECT c.chat_id, c.other_id, m.name
+        FROM chats c
+        LEFT JOIN members m ON m.id = c.other_id
+        WHERE c.user_id = ?
+    """,
+        (my_id,),
+    ).fetchall()
+
+    result = []
+    for chat_id, other_id, other_name in rows:
+        # Последнее сообщение
+        last_msg = None
+        history = get_p2p_history(chat_id, limit=1)
+        if history:
+            last_msg = {
+                "text": history[-1]["text"],
+                "timestamp": history[-1]["timestamp"],
+                "sender_id": history[-1]["sender_id"],
+            }
+
+        result.append(
+            {
+                "chat_id": chat_id,
+                "other_id": other_id,
+                "other_name": other_name or other_id[:8],
+                "last_message": last_msg,
+            }
+        )
+
+    # Сортируем по времени последнего сообщения
+    result.sort(
+        key=lambda x: x["last_message"]["timestamp"] if x["last_message"] else "",
+        reverse=True,
+    )
+
+    return {"chats": result}
+
+
 @app.get("/chat/{chat_id}")
-async def get_personal_chat(chat_id: str, count: int = 100, from_hash: str | None = None):
+async def get_personal_chat(
+    chat_id: str, count: int = 100, from_hash: str | None = None
+):
     dirpath = get_chat_dir(chat_id)
     if not os.path.exists(dirpath):
         raise fastapi.HTTPException(status_code=404, detail="Chat not found")
@@ -272,7 +349,9 @@ async def send_p2p_msg(chat_id: str, request: fastapi.Request):
     if not sender_id:
         raise fastapi.HTTPException(status_code=400, detail="Missing X-User-Id header")
 
-    row = cursor.execute("SELECT name FROM members WHERE id = ?", (sender_id,)).fetchone()
+    row = cursor.execute(
+        "SELECT name FROM members WHERE id = ?", (sender_id,)
+    ).fetchone()
     if not row:
         raise fastapi.HTTPException(status_code=403, detail="Unknown sender")
 
@@ -332,10 +411,7 @@ async def p2p_ws(chat_id: str, ws: WebSocket):
     p2p_clients.setdefault(chat_id, []).append(ws)
 
     try:
-        await ws.send_json({
-            "type": "history",
-            "messages": get_p2p_history(chat_id)
-        })
+        await ws.send_json({"type": "history", "messages": get_p2p_history(chat_id)})
 
         while True:
             await ws.receive_text()
@@ -348,11 +424,7 @@ async def p2p_ws(chat_id: str, ws: WebSocket):
             p2p_clients[chat_id].remove(ws)
 
 
-@app.get("/chat", response_class=HTMLResponse)
-async def get_chat_html():
-    return HTMLResponse(open("chat.html").read())
 if __name__ == "__main__":
 
     make_environ()
-
     uvicorn.run(app, host="0.0.0.0", port=80)

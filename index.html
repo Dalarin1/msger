@@ -3,42 +3,76 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 <title>Oleg Chat</title>
-
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-
 <style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-    margin: 0;
-    font-family: Inter, sans-serif;
+    font-family: system-ui, sans-serif;
     background: #f6f7f9;
     height: 100vh;
     display: flex;
-    flex-direction: column;
 }
 
-header {
+/* ── sidebar ── */
+nav {
+    width: 200px;
     background: white;
-    padding: 14px 20px;
-    border-bottom: 1px solid #e5e7eb;
-    font-weight: 600;
+    border-right: 1px solid #e5e7eb;
+    display: flex;
+    flex-direction: column;
+    padding: 20px 0;
+    flex-shrink: 0;
 }
 
-#status {
-    font-size: 12px;
-    color: #666;
-    margin-left: 10px;
+nav .logo {
+    font-size: 16px;
+    font-weight: 700;
+    padding: 0 20px 20px;
+    border-bottom: 1px solid #e5e7eb;
+    margin-bottom: 8px;
 }
+
+nav a {
+    display: block;
+    padding: 10px 20px;
+    text-decoration: none;
+    color: #555;
+    font-size: 14px;
+    border-radius: 0;
+    transition: background .12s, color .12s;
+}
+nav a:hover { background: #f3f4f6; color: #111; }
+nav a.active { background: #f3f4f6; color: #111; font-weight: 600; }
+
+/* ── main ── */
+main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.topbar {
+    background: white;
+    border-bottom: 1px solid #e5e7eb;
+    padding: 14px 20px;
+    font-weight: 600;
+    font-size: 15px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.topbar span { font-size: 12px; color: #999; font-weight: 400; }
 
 #messages {
     flex: 1;
     overflow-y: auto;
     padding: 20px;
-    max-width: 900px;
-    width: 100%;
-    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 }
 
 .msg {
@@ -46,185 +80,147 @@ header {
     border: 1px solid #e5e7eb;
     border-radius: 14px;
     padding: 10px 14px;
-    margin-bottom: 10px;
+    max-width: 700px;
 }
 
 .meta {
     font-size: 12px;
-    color: #666;
+    color: #999;
     margin-bottom: 4px;
 }
 
+.meta .sender {
+    color: #111;
+    font-weight: 600;
+    cursor: pointer;
+}
+.meta .sender:hover { text-decoration: underline; }
+
 .text {
+    font-size: 14px;
     white-space: pre-wrap;
     word-break: break-word;
+    color: #111;
 }
 
 #inputBar {
     display: flex;
     gap: 10px;
-    padding: 12px;
+    padding: 12px 20px;
     border-top: 1px solid #e5e7eb;
     background: white;
 }
 
-#text {
+#textInput {
     flex: 1;
-    padding: 12px 14px;
+    padding: 10px 14px;
     border-radius: 20px;
     border: 1px solid #ddd;
     outline: none;
+    font-family: system-ui, sans-serif;
+    font-size: 14px;
 }
+#textInput:focus { border-color: #111; }
 
-button {
+#sendBtn {
     background: black;
     color: white;
     border: none;
-    padding: 0 18px;
+    padding: 0 20px;
     border-radius: 20px;
     cursor: pointer;
+    font-size: 14px;
+    font-family: system-ui, sans-serif;
 }
-
-button:hover {
-    opacity: 0.9;
-}
-
+#sendBtn:hover { opacity: .9; }
 </style>
 </head>
-
 <body>
 
-<header>
-    Oleg Chat
-    <span id="status">connecting...</span>
-</header>
+<nav>
+    <div class="logo">Oleg Chat</div>
+    <a href="/" class="active">Главная</a>
+    <a href="/chat">Мои чаты</a>
+    <a href="/profile">Профиль</a>
+</nav>
 
-<div id="messages"></div>
+<main>
+    <div class="topbar">
+        Общий чат
+        <span id="status">connecting...</span>
+    </div>
 
-<div id="inputBar">
-    <input id="text" placeholder="Сообщение...">
-    <button>Send</button>
-</div>
+    <div id="messages"></div>
+
+    <div id="inputBar">
+        <input id="textInput" placeholder="Сообщение...">
+        <button id="sendBtn">Отправить</button>
+    </div>
+</main>
 
 <script>
+const messagesEl = document.getElementById("messages");
+const statusEl   = document.getElementById("status");
+const input      = document.getElementById("textInput");
 
-const messages = document.getElementById("messages");
-const statusEl = document.getElementById("status");
-const input = document.getElementById("text");
+let myId = localStorage.getItem("id");
 
-const name = localStorage.getItem("name")
-    || prompt("Name?") || "anon";
-
-localStorage.setItem("name", name);
+async function ensureRegistered() {
+    if (myId) return;
+    const name = prompt("Введи имя:") || "anon";
+    const res  = await fetch(`/register?name=${encodeURIComponent(name)}`);
+    const data = await res.json();
+    myId = data.id;
+    localStorage.setItem("id",   myId);
+    localStorage.setItem("name", data.name);
+}
 
 function add(msg) {
-
     const div = document.createElement("div");
     div.className = "msg";
-
     div.innerHTML = `
         <div class="meta">
-            <span class="sender-link" onclick="location.href='/chat?with=${msg.sender_id}'">${msg.sender}</span>
+            <span class="sender" onclick="location.href='/chat?with=${msg.sender_id}'">${escapeHtml(msg.sender)}</span>
         </div>
-        <div class="text">${escapeHtml(msg.text)}</div>
-    `;
-
-    messages.appendChild(div);
-    messages.scrollTop = messages.scrollHeight;
+        <div class="text">${escapeHtml(msg.text)}</div>`;
+    messagesEl.appendChild(div);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
 function escapeHtml(s) {
-    return s
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;");
+    return String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
 }
 
 const ws = new WebSocket(`ws://${location.host}/ws`);
-
-ws.onopen = () => {
-    statusEl.textContent = "online";
-};
-
-ws.onclose = () => {
-    statusEl.textContent = "offline";
-};
-
-ws.onerror = () => {
-    statusEl.textContent = "error";
-};
-
+ws.onopen  = () => { statusEl.textContent = "online"; };
+ws.onclose = () => { statusEl.textContent = "offline"; };
+ws.onerror = () => { statusEl.textContent = "error"; };
 ws.onmessage = (e) => {
-
     const data = JSON.parse(e.data);
-    if (data.type === "register"){
-        init().then(id => { myId = id; });
-    }
-    if (data.type === "history") {
-
-        messages.innerHTML = "";
-        data.messages.forEach(add);
-
-    }
-
-    if (data.type === "message") {
-        add(data.message);
-    }
+    if (data.type === "history") { messagesEl.innerHTML = ""; data.messages.forEach(add); }
+    if (data.type === "message") add(data.message);
+    if (data.type === "register") ensureRegistered();
 };
-
-async function init() {
-    let id = localStorage.getItem("id");
-
-    if (!id) {
-        const name = prompt("Введи имя:") || "anon";
-        const res = await fetch(
-            `/register?name=${encodeURIComponent(name)}`
-        );
-        const data = await res.json();
-        id = data.id;
-        localStorage.setItem("id", id);
-        localStorage.setItem("name", data.name);
-    }
-
-    return id;
-}
-
-// send() вызывается только после init()
-let myId = null;
-init().then(id => { myId = id; });
 
 async function send() {
     const text = input.value.trim();
     if (!text) return;
-
-    // Если id ещё нет — сначала регистрируемся
-    if (!myId) {
-        myId = await init();
-    }
-
-    const res = await fetch(
-        `/send_msg?text=${encodeURIComponent(text)}&id=${myId}`
-    );
+    if (!myId) { myId = await ensureRegistered(); }
+    const res  = await fetch(`/send_msg?text=${encodeURIComponent(text)}&id=${myId}`);
     const data = await res.json();
-
-    // Сервер говорит что id не найден — перерегистрируемся
     if (data.type === "register") {
         localStorage.removeItem("id");
-        myId = await init();
-        // Повторяем отправку
+        myId = null;
+        await ensureRegistered();
         await fetch(`/send_msg?text=${encodeURIComponent(text)}&id=${myId}`);
     }
-
     input.value = "";
 }
 
-input.addEventListener("keydown", e => {
-    document.querySelector("button").addEventListener("click", send);
+input.addEventListener("keydown", e => { if (e.key === "Enter") send(); });
+document.getElementById("sendBtn").addEventListener("click", send);
 
-    if (e.key === "Enter") send();
-});
-
+ensureRegistered();
 </script>
-
 </body>
 </html>
