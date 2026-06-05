@@ -103,7 +103,7 @@ button:hover {
 
 <div id="inputBar">
     <input id="text" placeholder="Сообщение...">
-    <button onclick="send()">Send</button>
+    <button>Send</button>
 </div>
 
 <script>
@@ -157,7 +157,9 @@ ws.onerror = () => {
 ws.onmessage = (e) => {
 
     const data = JSON.parse(e.data);
-
+    if (data.type === "register"){
+        init().then(id => { myId = id; });
+    }
     if (data.type === "history") {
 
         messages.innerHTML = "";
@@ -170,17 +172,55 @@ ws.onmessage = (e) => {
     }
 };
 
-function send() {
+async function init() {
+    let id = localStorage.getItem("id");
 
+    if (!id) {
+        const name = prompt("Введи имя:") || "anon";
+        const res = await fetch(
+            `/register?name=${encodeURIComponent(name)}`
+        );
+        const data = await res.json();
+        id = data.id;
+        localStorage.setItem("id", id);
+        localStorage.setItem("name", data.name);
+    }
+
+    return id;
+}
+
+// send() вызывается только после init()
+let myId = null;
+init().then(id => { myId = id; });
+
+async function send() {
     const text = input.value.trim();
     if (!text) return;
 
-    fetch(`/send_msg?text=${encodeURIComponent(text)}`);
+    // Если id ещё нет — сначала регистрируемся
+    if (!myId) {
+        myId = await init();
+    }
+
+    const res = await fetch(
+        `/send_msg?text=${encodeURIComponent(text)}&id=${myId}`
+    );
+    const data = await res.json();
+
+    // Сервер говорит что id не найден — перерегистрируемся
+    if (data.type === "register") {
+        localStorage.removeItem("id");
+        myId = await init();
+        // Повторяем отправку
+        await fetch(`/send_msg?text=${encodeURIComponent(text)}&id=${myId}`);
+    }
 
     input.value = "";
 }
 
 input.addEventListener("keydown", e => {
+    document.querySelector("button").addEventListener("click", send);
+    
     if (e.key === "Enter") send();
 });
 
