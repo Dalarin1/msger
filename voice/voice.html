@@ -8,6 +8,8 @@
 <input id="room" placeholder="room id">
 <button id="joinBtn">Join</button>
 <button id="camBtn" disabled>📷 Включить вебку</button>
+<button id="screenBtn" disabled>🖥️ Включить экран</button>
+
 <div id="status"></div>
 
 <div id="videos" style="display:flex; gap:10px; margin-top:10px; flex-wrap:wrap;">
@@ -21,10 +23,13 @@ const socket = io();
 let pc = null;
 let localStream = null;
 let localVideoStream = null;
+let screenStream = null;
+
 let room = null;
 let pendingCandidates = [];
 let joined = false;
 let videoEnabled = false;
+let screenEnabled = false;
 
 const config = {
     iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
@@ -37,6 +42,7 @@ function setStatus(msg) {
 
 document.getElementById("joinBtn").addEventListener("click", joinRoom);
 document.getElementById("camBtn").addEventListener("click", toggleCamera);
+document.getElementById("screenBtn").addEventListener("click", toggleScreen);
 
 socket.on("connect", () => setStatus("Connected to server"));
 
@@ -103,6 +109,7 @@ function createPeer() {
 
     pc.ontrack = (e) => {
         const stream = e.streams[0];
+
         if (e.track.kind === "audio") {
             setStatus("Audio received!");
             const existing = document.getElementById("remote-audio");
@@ -113,6 +120,7 @@ function createPeer() {
             if (!existing) document.body.appendChild(audio);
             audio.play().catch(err => console.log("play error", err));
         }
+
         if (e.track.kind === "video") {
             setStatus("Video received!");
             const remoteVideo = document.getElementById("remoteVideo");
@@ -144,6 +152,7 @@ async function joinRoom() {
     createPeer();
     socket.emit("join", { room });
     document.getElementById("camBtn").disabled = false;
+    document.getElementById("screenBtn").disabled = false;
 }
 
 async function toggleCamera() {
@@ -156,11 +165,10 @@ async function toggleCamera() {
             localVideo.srcObject = localVideoStream;
             localVideo.style.display = "block";
 
-            // добавляем видеотрек в существующий peer connection
             const videoTrack = localVideoStream.getVideoTracks()[0];
+
             if (pc) {
                 pc.addTrack(videoTrack, localVideoStream);
-                // переговорка нужна — отправляем новый оффер
                 const offer = await pc.createOffer();
                 await pc.setLocalDescription(offer);
                 socket.emit("signal", { room, sdp: offer });
@@ -174,15 +182,14 @@ async function toggleCamera() {
             alert("Camera error: " + err.message);
         }
     } else {
-        // останавливаем треки
         if (localVideoStream) {
             localVideoStream.getTracks().forEach(t => t.stop());
             localVideoStream = null;
         }
+
         localVideo.srcObject = null;
         localVideo.style.display = "none";
 
-        // убираем видеосендеры из pc
         if (pc) {
             pc.getSenders()
                 .filter(s => s.track && s.track.kind === "video")
@@ -196,6 +203,60 @@ async function toggleCamera() {
         videoEnabled = false;
         btn.textContent = "📷 Включить вебку";
         setStatus("Camera OFF");
+    }
+}
+
+async function toggleScreen() {
+    const btn = document.getElementById("screenBtn");
+
+    if (!screenEnabled) {
+        try {
+            screenStream = await navigator.mediaDevices.getDisplayMedia({
+                video: true,
+                audio: true
+            });
+
+            const screenTrack = screenStream.getVideoTracks()[0];
+
+            if (pc) {
+                pc.addTrack(screenTrack, screenStream);
+
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                socket.emit("signal", { room, sdp: offer });
+            }
+
+            screenEnabled = true;
+            btn.textContent = "⛔ Выключить экран";
+            setStatus("Screen ON");
+
+            screenTrack.onended = () => {
+                if (screenEnabled) toggleScreen();
+            };
+
+        } catch (err) {
+            console.error("SCREEN ERROR", err);
+            alert("Screen share error: " + err.message);
+        }
+    } else {
+        if (screenStream) {
+            screenStream.getTracks().forEach(t => t.stop());
+            screenStream = null;
+        }
+
+        if (pc) {
+            pc.getSenders()
+                .filter(s => s.track && s.track.kind === "video")
+                .forEach(s => pc.removeTrack(s));
+
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            socket.emit("signal", { room, sdp: offer });
+        }
+
+        screenEnabled = false;
+        btn.textContent = "🖥️ Включить экран";
+        setStatus("Screen OFF");
     }
 }
 </script>
