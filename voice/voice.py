@@ -1,5 +1,5 @@
 from flask import Flask, send_file, request
-from flask_socketio import SocketIO, join_room, emit
+from flask_socketio import SocketIO, join_room, emit, leave_room
 
 app = Flask(__name__)
 socketio = SocketIO(
@@ -10,55 +10,72 @@ socketio = SocketIO(
     engineio_logger=False
 )
 
-# room -> set of session ids
-rooms = {}
-# sid -> room
-sid_to_room = {}
+rooms = {}          # room -> set(sid)
+sid_to_room = {}    # sid -> room
+
+MAX_USERS = 2
+
 
 @app.route("/")
 def index():
     return send_file("voice.html")
 
+
 @app.route("/socket.io.min.js")
 def serve_socketio():
     return send_file("socket.io.min.js")
+
 
 @socketio.on("join")
 def on_join(data):
     sid = request.sid
     room = data["room"]
 
-    join_room(room)
-
     if room not in rooms:
         rooms[room] = set()
+
+    # ❗ проверка ДО добавления
+    if len(rooms[room]) >= MAX_USERS:
+        emit("room-full", {})
+        print(f"REJECT {sid} room={room} FULL")
+        return
+
+    join_room(room)
+
     rooms[room].add(sid)
     sid_to_room[sid] = room
 
     count = len(rooms[room])
+
     print(f"JOIN {room} sid={sid} count={count}")
 
-    emit("room-state", {"count": count}, to=room)
+    emit("room-users", list(rooms[room]), to=room)
 
-    if count >= 2:
-        emit("user-joined", {}, to=room, include_self=False)
 
 @socketio.on("signal")
 def on_signal(data):
     emit("signal", data, to=data["room"], include_self=False)
 
+
 @socketio.on("disconnect")
 def on_disconnect():
     sid = request.sid
     room = sid_to_room.pop(sid, None)
-    if room and room in rooms:
+
+    if not room:
+        return
+
+    if room in rooms:
         rooms[room].discard(sid)
-        count = len(rooms[room])
-        print(f"DISCONNECT {sid} room={room} count={count}")
-        if count == 0:
+
+        if len(rooms[room]) == 0:
             del rooms[room]
         else:
-            emit("room-state", {"count": count}, to=room)
+            emit("room-users", list(rooms[room]), to=room)
+            emit("user-left", {"sid": sid}, to=room)
+
+        leave_room(room)
+
 
 if __name__ == "__main__":
     socketio.run(

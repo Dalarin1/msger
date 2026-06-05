@@ -4,51 +4,78 @@
     <title>Voice Chat</title>
 </head>
 <body>
+
 <h2>Voice Chat</h2>
+
 <input id="room" placeholder="room id">
 <button id="joinBtn">Join</button>
+<button id="leaveBtn" disabled>❌ Выйти</button>
+
 <button id="camBtn" disabled>📷 Включить вебку</button>
 <button id="screenBtn" disabled>🖥️ Включить экран</button>
 
 <div id="status"></div>
+<div id="users"></div>
 
 <div id="localVideos" style="display:flex; gap:10px; margin-top:10px; flex-wrap:wrap;"></div>
-<div id="remoteVideos" style="display:flex; gap:10px; margin-top:10px; flex-wrap:wrap;"></div>
+<div id="remoteVideos" style="display:flex; gap:10px; flex-wrap:wrap;"></div>
 
 <script src="/socket.io.min.js"></script>
 <script>
 const socket = io();
+
 let pc = null;
-let localStream = null;        // аудио (микрофон)
+let room = null;
+let joined = false;
+
+let localStream = null;
 let cameraStream = null;
 let screenStream = null;
 
-let room = null;
-let joined = false;
+let cameraSender = null;
+let screenSender = null;
+
+let camBusy = false;
+
+const remoteVideos = new Map();
 
 const config = {
     iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
 };
 
+// ---------------- UI ----------------
 function setStatus(msg) {
     document.getElementById("status").textContent = msg;
     console.log(msg);
 }
 
 document.getElementById("joinBtn").addEventListener("click", joinRoom);
+document.getElementById("leaveBtn").addEventListener("click", leaveRoom);
 document.getElementById("camBtn").addEventListener("click", toggleCamera);
 document.getElementById("screenBtn").addEventListener("click", toggleScreen);
 
-socket.on("connect", () => setStatus("Connected to server"));
+// ---------------- SOCKET ----------------
+socket.on("connect", () => setStatus("Connected"));
 
-socket.on("room-state", (data) => {
-    setStatus(`Users in room: ${data.count}`);
+socket.on("room-users", (users) => {
+    document.getElementById("users").innerHTML =
+        "<b>Users:</b><br>" + users.map(u => "• " + u).join("<br>");
 });
 
-socket.on("user-joined", () => {
-    setStatus("New user joined, creating offer...");
-    if (!pc) createPeer();
-    renegotiate();
+socket.on("room-full", () => {
+    alert("Room is full (max 2 users)");
+});
+
+socket.on("user-left", () => {
+    setStatus("User left");
+
+    if (pc) {
+        pc.close();
+        pc = null;
+    }
+
+    remoteVideos.clear();
+    document.getElementById("remoteVideos").innerHTML = "";
 });
 
 socket.on("signal", async (data) => {
@@ -67,14 +94,14 @@ socket.on("signal", async (data) => {
     if (data.candidate) {
         try {
             await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-        } catch (e) {
-            console.log("ICE error", e);
-        }
+        } catch (e) {}
     }
 });
 
+// ---------------- PEER ----------------
 function createPeer() {
     if (pc) pc.close();
+
     pc = new RTCPeerConnection(config);
 
     pc.onicecandidate = (e) => {
@@ -83,170 +110,234 @@ function createPeer() {
         }
     };
 
-    pc.onconnectionstatechange = () => {
-        setStatus("WebRTC: " + pc.connectionState);
-    };
-
     pc.ontrack = (e) => {
         const stream = e.streams[0];
         if (!stream) return;
 
         if (e.track.kind === "audio") {
-            const audio = document.createElement("audio");
+            let audio = document.getElementById("audio-" + stream.id);
+
+            if (!audio) {
+                audio = document.createElement("audio");
+                audio.autoplay = true;
+                audio.id = "audio-" + stream.id;
+                document.body.appendChild(audio);
+            }
+
             audio.srcObject = stream;
-            audio.autoplay = true;
-            document.body.appendChild(audio);
-            setStatus("Audio received");
+            return;
         }
 
         if (e.track.kind === "video") {
-            const video = document.createElement("video");
+            let video = remoteVideos.get(stream.id);
+
+            if (!video) {
+                video = document.createElement("video");
+                video.autoplay = true;
+                video.playsInline = true;
+                video.style.width = "320px";
+                video.style.background = "#000";
+
+                document.getElementById("remoteVideos").appendChild(video);
+                remoteVideos.set(stream.id, video);
+
+                stream.onremovetrack = () => {
+                    video.remove();
+                    remoteVideos.delete(stream.id);
+                };
+            }
+
             video.srcObject = stream;
-            video.autoplay = true;
-            video.playsInline = true;
-            video.style.width = "320px";
-            video.style.background = "#000";
-            document.getElementById("remoteVideos").appendChild(video);
-            setStatus("Video received");
         }
     };
 }
 
+// ---------------- JOIN ----------------
 async function joinRoom() {
     if (joined) return;
+
     room = document.getElementById("room").value.trim();
     if (!room) return alert("Enter room id");
 
+    // reset old pc if exists
+    if (pc) {
+        pc.close();
+        pc = null;
+    }
+
     try {
         localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        setStatus("Microphone OK");
-    } catch (err) {
-        console.error(err);
-        return alert("Microphone error: " + err.message);
+    } catch (e) {
+        return alert("Mic error: " + e.message);
     }
 
-    joined = true;
     createPeer();
 
-    // Добавляем аудио сразу
-    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+    localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
 
     socket.emit("join", { room });
+
+    setTimeout(() => {
+        renegotiate();
+    }, 300);
+
+    joined = true;
+
     document.getElementById("camBtn").disabled = false;
     document.getElementById("screenBtn").disabled = false;
+    document.getElementById("leaveBtn").disabled = false;
+
+    setStatus("Joined room");
 }
 
+// ---------------- LEAVE ----------------
+async function leaveRoom() {
+    setStatus("Leaving room...");
+
+    if (cameraStream) {
+        cameraStream.getTracks().forEach(t => t.stop());
+        cameraStream = null;
+    }
+
+    if (screenStream) {
+        screenStream.getTracks().forEach(t => t.stop());
+        screenStream = null;
+    }
+
+    if (pc) {
+        pc.close();
+        pc = null;
+    }
+
+    remoteVideos.clear();
+
+    document.getElementById("localVideos").innerHTML = "";
+    document.getElementById("remoteVideos").innerHTML = "";
+    document.getElementById("users").innerHTML = "";
+
+    socket.emit("leave", { room });
+
+    room = null;
+    joined = false;
+
+    document.getElementById("camBtn").disabled = true;
+    document.getElementById("screenBtn").disabled = true;
+    document.getElementById("leaveBtn").disabled = true;
+
+    setStatus("Left room");
+}
+
+// ---------------- RENEGOTIATE ----------------
 async function renegotiate() {
     if (!pc) return;
-    try {
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        socket.emit("signal", { room, sdp: offer });
-    } catch (e) {
-        console.error("Renegotiation error", e);
-    }
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    socket.emit("signal", { room, sdp: offer });
 }
 
-// ==================== CAMERA ====================
+// ---------------- CAMERA ----------------
 async function toggleCamera() {
-    const btn = document.getElementById("camBtn");
-    const isEnabled = !!cameraStream;
+    if (camBusy) return;
+    camBusy = true;
 
-    if (!isEnabled) {
-        try {
+    const btn = document.getElementById("camBtn");
+    btn.disabled = true;
+
+    try {
+        if (!cameraStream) {
             cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
 
-            const localVideo = document.createElement("video");
-            localVideo.id = "localCam";
-            localVideo.srcObject = cameraStream;
-            localVideo.autoplay = true;
-            localVideo.muted = true;
-            localVideo.style.width = "320px";
-            document.getElementById("localVideos").appendChild(localVideo);
+            const video = document.createElement("video");
+            video.id = "localCam";
+            video.autoplay = true;
+            video.playsInline = true;
+            video.muted = true;
+            video.style.width = "320px";
+            video.srcObject = cameraStream;
 
-            cameraStream.getTracks().forEach(track => pc.addTrack(track, cameraStream));
+            document.getElementById("localVideos").appendChild(video);
+
+            const track = cameraStream.getVideoTracks()[0];
+
+            if (!pc.getSenders().some(s => s.track === track)) {
+                cameraSender = pc.addTrack(track, cameraStream);
+            }
 
             btn.textContent = "⛔ Выключить вебку";
-            setStatus("Camera ON");
-        } catch (err) {
-            alert("Camera error: " + err.message);
-            return;
-        }
-    } else {
-        // Выключаем камеру
-        if (cameraStream) {
+
+        } else {
             cameraStream.getTracks().forEach(t => t.stop());
+
+            if (cameraSender) {
+                pc.removeTrack(cameraSender);
+                cameraSender = null;
+            }
+
             cameraStream = null;
+
+            const v = document.getElementById("localCam");
+            if (v) v.remove();
+
+            btn.textContent = "📷 Включить вебку";
         }
-        const localCam = document.getElementById("localCam");
-        if (localCam) localCam.remove();
 
-        // Удаляем только видео-треки от камеры
-        pc.getSenders()
-            .filter(sender => sender.track && 
-                   sender.track.kind === "video" && 
-                   !sender.track.label.includes("screen")) // грубая проверка
-            .forEach(sender => pc.removeTrack(sender));
+        await renegotiate();
 
-        btn.textContent = "📷 Включить вебку";
-        setStatus("Camera OFF");
+    } catch (e) {
+        alert("Camera error: " + e.message);
     }
 
-    await renegotiate();
+    btn.disabled = false;
+    camBusy = false;
 }
 
-// ==================== SCREEN ====================
+// ---------------- SCREEN ----------------
 async function toggleScreen() {
     const btn = document.getElementById("screenBtn");
-    const isEnabled = !!screenStream;
 
-    if (!isEnabled) {
-        try {
-            screenStream = await navigator.mediaDevices.getDisplayMedia({
-                video: true,
-                audio: false // можно включить, если нужно
-            });
+    try {
+        if (!screenStream) {
+            screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
 
-            const localScreen = document.createElement("video");
-            localScreen.id = "localScreen";
-            localScreen.srcObject = screenStream;
-            localScreen.autoplay = true;
-            localScreen.muted = true;
-            localScreen.style.width = "320px";
-            document.getElementById("localVideos").appendChild(localScreen);
+            const video = document.createElement("video");
+            video.id = "localScreen";
+            video.autoplay = true;
+            video.playsInline = true;
+            video.muted = true;
+            video.style.width = "320px";
+            video.srcObject = screenStream;
 
-            screenStream.getTracks().forEach(track => pc.addTrack(track, screenStream));
+            document.getElementById("localVideos").appendChild(video);
+
+            screenSender = pc.addTrack(screenStream.getVideoTracks()[0], screenStream);
+
+            screenStream.getVideoTracks()[0].onended = () => toggleScreen();
 
             btn.textContent = "⛔ Выключить экран";
-            setStatus("Screen sharing ON");
 
-            // Авто-выключение при остановке шаринга
-            screenStream.getVideoTracks()[0].onended = () => {
-                if (screenStream) toggleScreen();
-            };
-        } catch (err) {
-            alert("Screen share error: " + err.message);
-            return;
-        }
-    } else {
-        if (screenStream) {
+        } else {
             screenStream.getTracks().forEach(t => t.stop());
+
+            if (screenSender) {
+                pc.removeTrack(screenSender);
+                screenSender = null;
+            }
+
             screenStream = null;
+
+            const v = document.getElementById("localScreen");
+            if (v) v.remove();
+
+            btn.textContent = "🖥️ Включить экран";
         }
-        const localScreen = document.getElementById("localScreen");
-        if (localScreen) localScreen.remove();
 
-        // Удаляем только screen-треки
-        pc.getSenders()
-            .filter(sender => sender.track && sender.track.kind === "video")
-            .forEach(sender => pc.removeTrack(sender)); // можно улучшить фильтрацию
+        await renegotiate();
 
-        btn.textContent = "🖥️ Включить экран";
-        setStatus("Screen sharing OFF");
+    } catch (e) {
+        alert("Screen error: " + e.message);
     }
-
-    await renegotiate();
 }
 </script>
+
 </body>
 </html>
