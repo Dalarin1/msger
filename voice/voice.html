@@ -1,343 +1,620 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
-    <title>Voice Chat</title>
+<meta charset="utf-8">
+<title>Voice Chat</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Courier New', monospace;
+  background: #f0f0ed;
+  color: #1a1a1a;
+  padding: 24px;
+  min-height: 100vh;
+}
+
+h2 {
+  font-size: 14px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: #111;
+  margin-bottom: 18px;
+}
+
+/* ── controls ── */
+.bar {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+input#room {
+  background: #fff;
+  border: 1px solid #ccc;
+  color: #111;
+  padding: 6px 10px;
+  border-radius: 4px;
+  width: 150px;
+  font-family: inherit;
+  font-size: 13px;
+  outline: none;
+  transition: border-color .15s;
+}
+input#room:focus { border-color: #888; }
+
+button {
+  background: #fff;
+  border: 1px solid #bbb;
+  color: #333;
+  padding: 6px 13px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  transition: background .12s, border-color .12s, color .12s;
+  user-select: none;
+}
+button:hover:not(:disabled) { background: #f5f5f5; border-color: #999; }
+button:disabled { opacity: 0.35; cursor: default; }
+button.on   { border-color: #2e7d45; color: #2e7d45; background: #f0faf3; }
+button.mute { border-color: #c0392b; color: #c0392b; background: #fdf3f2; }
+
+/* ── status ── */
+#status {
+  font-size: 11px;
+  color: #888;
+  margin: 0 0 5px;
+  min-height: 15px;
+}
+#users {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 16px;
+  min-height: 15px;
+}
+
+/* ── sections ── */
+.section { margin-bottom: 20px; }
+.section-title {
+  font-size: 10px;
+  color: #aaa;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin-bottom: 8px;
+}
+.grid { display: flex; gap: 10px; flex-wrap: wrap; }
+
+/* ── video slot ── */
+.slot { position: relative; width: 320px; flex-shrink: 0; }
+.slot-label {
+  font-size: 10px;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 4px;
+}
+video {
+  display: block;
+  width: 320px;
+  height: 180px;
+  background: #ddd;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+}
+video:fullscreen          { width:100vw; height:100vh; object-fit:contain; background:#000; }
+video:-webkit-full-screen { width:100vw; height:100vh; object-fit:contain; background:#000; }
+
+/* fullscreen button */
+.fs-btn {
+  position: absolute;
+  bottom: 7px; right: 7px;
+  background: rgba(255,255,255,.75);
+  border: 1px solid rgba(0,0,0,.15);
+  color: #444;
+  font-size: 12px;
+  padding: 2px 7px;
+  border-radius: 3px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .12s;
+  font-family: inherit;
+}
+.slot:hover .fs-btn { opacity: 1; }
+.fs-btn:hover { background: rgba(255,255,255,.95) !important; }
+
+/* bandwidth badge */
+.bw-badge {
+  position: absolute;
+  top: 26px; left: 7px;
+  background: rgba(255,255,255,.7);
+  color: #666;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  pointer-events: none;
+  display: none;
+}
+</style>
 </head>
 <body>
 
 <h2>Voice Chat</h2>
 
-<input id="room" placeholder="room id">
-<button id="joinBtn">Join</button>
-<button id="leaveBtn" disabled>❌ Выйти</button>
+<div class="bar">
+  <input id="room" placeholder="room id" autocomplete="off" spellcheck="false">
+  <button id="btnJoin">Join</button>
+  <button id="btnLeave"  disabled>Leave</button>
+  <button id="btnMute"   disabled>🎙 Mute</button>
+  <button id="btnCam"    disabled>📷 Camera</button>
+  <button id="btnScreen" disabled>🖥 Screen</button>
+</div>
 
-<button id="camBtn" disabled>📷 Включить вебку</button>
-<button id="screenBtn" disabled>🖥️ Включить экран</button>
-
-<div id="status"></div>
+<div id="status">—</div>
 <div id="users"></div>
 
-<div id="localVideos" style="display:flex; gap:10px; margin-top:10px; flex-wrap:wrap;"></div>
-<div id="remoteVideos" style="display:flex; gap:10px; flex-wrap:wrap;"></div>
+<div class="section">
+  <div class="section-title">You</div>
+  <div class="grid">
+    <div class="slot">
+      <div class="slot-label">Camera</div>
+      <video id="lCam"    autoplay playsinline muted></video>
+      <button class="fs-btn" onclick="doFs('lCam')">⛶</button>
+    </div>
+    <div class="slot">
+      <div class="slot-label">Screen</div>
+      <video id="lScreen" autoplay playsinline muted></video>
+      <button class="fs-btn" onclick="doFs('lScreen')">⛶</button>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">Remote</div>
+  <div class="grid">
+    <div class="slot">
+      <div class="slot-label">Camera</div>
+      <video id="rCam"    autoplay playsinline></video>
+      <button class="fs-btn" onclick="doFs('rCam')">⛶</button>
+      <span class="bw-badge" id="bwCam"></span>
+    </div>
+    <div class="slot">
+      <div class="slot-label">Screen</div>
+      <video id="rScreen" autoplay playsinline></video>
+      <button class="fs-btn" onclick="doFs('rScreen')">⛶</button>
+      <span class="bw-badge" id="bwScreen"></span>
+    </div>
+  </div>
+</div>
 
 <script src="/socket.io.min.js"></script>
 <script>
+"use strict";
+
+// ── config ────────────────────────────────────────────────────────────────────
+
+const ICE_CFG = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+
+const AUDIO_CFG = { audio: {
+  echoCancellation: true,
+  noiseSuppression: true,
+  autoGainControl:  true,
+}};
+
+const CAM_CFG = { video: {
+  width:     { ideal: 1280 },
+  height:    { ideal: 720  },
+  frameRate: { ideal: 30   },
+}};
+
+const SCREEN_CFG = { video: {
+  width:     { ideal: 1920 },
+  height:    { ideal: 1080 },
+  frameRate: { ideal: 60   },
+  cursor: "always",
+}};
+
+// Целевой битрейт (браузер стремится к нему; при плохом канале дропает качество сам)
+const BW_CAM    = 4_000_000;  // 4 Mbps для 720p30
+const BW_SCREEN = 8_000_000;  // 8 Mbps для 1080p60
+
+// ── постоянный чёрный трек ────────────────────────────────────────────────────
+
+const _blkCanvas = Object.assign(document.createElement("canvas"), { width: 2, height: 2 });
+(function paintBlack() {
+  _blkCanvas.getContext("2d").fillRect(0, 0, 2, 2);
+  requestAnimationFrame(paintBlack);
+})();
+const _blkStream = _blkCanvas.captureStream(1);
+function blackTrack() { return _blkStream.getVideoTracks()[0].clone(); }
+
+// ── state ─────────────────────────────────────────────────────────────────────
+
 const socket = io();
 
-let pc = null;
-let room = null;
-let joined = false;
+let pc           = null;
+let room         = null;
+let joined       = false;
+let muted        = false;
+let myId         = null;
 
-let localStream = null;
-let cameraStream = null;
+let localStream  = null;
+let camStream    = null;
 let screenStream = null;
 
-let cameraSender = null;
+let audioSender  = null;
+let camSender    = null;
 let screenSender = null;
 
-let camBusy = false;
+let remoteAudioEl = null;
+let statsTimer    = null;
+let prevStats     = {};
 
-const remoteVideos = new Map();
+// ── helpers ───────────────────────────────────────────────────────────────────
 
-const config = {
-    iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
-};
+const $   = id  => document.getElementById(id);
+const log = msg => { $("status").textContent = msg; console.log("[vc]", msg); };
 
-// ---------------- UI ----------------
-function setStatus(msg) {
-    document.getElementById("status").textContent = msg;
-    console.log(msg);
+function doFs(id) {
+  const v = $(id);
+  (v.requestFullscreen || v.webkitRequestFullscreen).call(v);
 }
 
-document.getElementById("joinBtn").addEventListener("click", joinRoom);
-document.getElementById("leaveBtn").addEventListener("click", leaveRoom);
-document.getElementById("camBtn").addEventListener("click", toggleCamera);
-document.getElementById("screenBtn").addEventListener("click", toggleScreen);
+function stopTracks(stream) {
+  if (stream) stream.getTracks().forEach(t => t.stop());
+}
 
-// ---------------- SOCKET ----------------
-socket.on("connect", () => setStatus("Connected"));
+// Выставить целевой битрейт через setParameters.
+// Вызывать только после установки соединения (после setLocalDescription),
+// иначе encodings пустые и браузер вернёт ошибку.
+async function applyBitrate(sender, bps) {
+  if (!sender) return;
+  try {
+    const params = sender.getParameters();
+    if (!params.encodings || params.encodings.length === 0) {
+      params.encodings = [{}];
+    }
+    params.encodings.forEach(enc => { enc.maxBitrate = bps; });
+    await sender.setParameters(params);
+  } catch (_) {
+    // Не критично — браузер сам выберет битрейт
+  }
+}
 
-socket.on("room-users", (users) => {
-    document.getElementById("users").innerHTML =
-        "<b>Users:</b><br>" + users.map(u => "• " + u).join("<br>");
+// SDP: только аудио патчим (Opus 32 kbps моно, потолок 40 kbps).
+// Видео НЕ ограничиваем в SDP — BWE сам регулирует.
+function patchSdp(sdp) {
+  return sdp
+    .replace(
+      /a=fmtp:(\d+) (.*useinbandfec=1.*)/g,
+      (_, pt, rest) => `a=fmtp:${pt} ${rest};maxaveragebitrate=32000;stereo=0;sprop-stereo=0`
+    )
+    .replace(/(m=audio [^\n]+\n)/g, "$1b=AS:40\n");
+}
+
+// ── peer ──────────────────────────────────────────────────────────────────────
+
+function setupPeer() {
+  closePeer();
+
+  pc = new RTCPeerConnection(ICE_CFG);
+
+  pc.onicecandidate = ({ candidate }) => {
+    if (candidate) socket.emit("signal", { room, candidate });
+  };
+
+  pc.onconnectionstatechange = () => {
+    log("Peer: " + pc.connectionState);
+    if (pc.connectionState === "connected")                            startStats();
+    if (["disconnected","failed","closed"].includes(pc.connectionState)) stopStats();
+  };
+
+  // Порядок transceivers фиксирован: 0 = audio, 1 = cam, 2 = screen
+  audioSender  = pc.addTrack(localStream.getAudioTracks()[0], localStream);
+  camSender    = pc.addTrack(blackTrack(), new MediaStream());
+  screenSender = pc.addTrack(blackTrack(), new MediaStream());
+
+  // Восстанавливаем живые треки если они уже были включены (реконнект)
+  if (camStream)    camSender.replaceTrack(camStream.getVideoTracks()[0]);
+  if (screenStream) screenSender.replaceTrack(screenStream.getVideoTracks()[0]);
+
+  // Мьют-состояние
+  localStream.getAudioTracks().forEach(t => { t.enabled = !muted; });
+
+  pc.ontrack = onRemoteTrack;
+}
+
+function onRemoteTrack(evt) {
+  const transceivers = pc.getTransceivers();
+  const idx = transceivers.findIndex(t => t.receiver === evt.receiver);
+
+  if (evt.track.kind === "audio") {
+    if (!remoteAudioEl) {
+      remoteAudioEl = document.createElement("audio");
+      remoteAudioEl.autoplay = true;
+      document.body.appendChild(remoteAudioEl);
+    }
+    remoteAudioEl.srcObject = evt.streams[0] || new MediaStream([evt.track]);
+    return;
+  }
+
+  // idx 1 → camera, idx 2 → screen
+  const el = idx === 1 ? $("rCam") : idx === 2 ? $("rScreen") : null;
+  if (!el) return;
+
+  if (!el.srcObject) {
+    el.srcObject = new MediaStream([evt.track]);
+  } else {
+    const old = el.srcObject.getVideoTracks()[0];
+    if (old) el.srcObject.removeTrack(old);
+    el.srcObject.addTrack(evt.track);
+  }
+}
+
+function closePeer() {
+  if (!pc) return;
+  pc.ontrack = null;
+  pc.onicecandidate = null;
+  pc.onconnectionstatechange = null;
+  pc.close();
+  pc = null;
+  audioSender = camSender = screenSender = null;
+  stopStats();
+}
+
+function clearRemote() {
+  $("rCam").srcObject    = null;
+  $("rScreen").srcObject = null;
+  if (remoteAudioEl) { remoteAudioEl.remove(); remoteAudioEl = null; }
+}
+
+// ── offer / answer ────────────────────────────────────────────────────────────
+
+async function sendOffer() {
+  if (!pc || !joined) return;
+  try {
+    const offer = await pc.createOffer();
+    offer.sdp = patchSdp(offer.sdp);
+    await pc.setLocalDescription(offer);
+    socket.emit("signal", { room, sdp: pc.localDescription });
+  } catch (e) {
+    console.warn("sendOffer:", e);
+  }
+}
+
+// ── stats ─────────────────────────────────────────────────────────────────────
+
+function startStats() {
+  stopStats();
+  statsTimer = setInterval(async () => {
+    if (!pc) return;
+    const report = await pc.getStats();
+    report.forEach(s => {
+      if (s.type !== "inbound-rtp" || s.kind !== "video") return;
+      const prev = prevStats[s.id];
+      prevStats[s.id] = s;
+      if (!prev) return;
+      const dt = (s.timestamp - prev.timestamp) / 1000;
+      if (dt <= 0) return;
+      const kbps = Math.round((s.bytesReceived - prev.bytesReceived) * 8 / dt / 1000);
+      const videoIds = Object.keys(prevStats).filter(k => prevStats[k].kind === "video");
+      const pos = videoIds.indexOf(s.id);
+      const badge = pos === 0 ? $("bwCam") : pos === 1 ? $("bwScreen") : null;
+      if (!badge) return;
+      badge.style.display = "block";
+      badge.textContent   = kbps + " kbps";
+    });
+  }, 2000);
+}
+
+function stopStats() {
+  clearInterval(statsTimer);
+  statsTimer = null;
+  prevStats  = {};
+  [$("bwCam"), $("bwScreen")].forEach(b => { if (b) b.style.display = "none"; });
+}
+
+// ── socket ────────────────────────────────────────────────────────────────────
+
+socket.on("connect", () => {
+  myId = socket.id;
+  log("Connected · " + myId);
+});
+
+socket.on("connect_error", e => log("Socket error: " + e.message));
+
+socket.on("room-state", state => {
+  $("users").textContent = "Users: " + state.users.length + "/2";
+  if (!joined) return;
+
+  if (state.users.length === 2 && state.offerer === myId) {
+    // Мы offerer, оба в комнате — (пере)создаём peer и шлём offer
+    setupPeer();
+    sendOffer();
+  } else if (state.users.length === 1) {
+    log("Waiting for peer…");
+  }
 });
 
 socket.on("room-full", () => {
-    alert("Room is full (max 2 users)");
+  alert("Room is full (max 2 users)");
+  joined = false;
+  resetUi();
 });
 
 socket.on("user-left", () => {
-    setStatus("User left");
-
-    if (pc) {
-        pc.close();
-        pc = null;
-    }
-
-    remoteVideos.clear();
-    document.getElementById("remoteVideos").innerHTML = "";
+  log("Peer left — waiting…");
+  closePeer();
+  clearRemote();
+  // Сервер пришлёт room-state следом → setupPeer там
 });
 
-socket.on("signal", async (data) => {
-    if (!pc) createPeer();
+socket.on("signal", async data => {
+  if (!pc) setupPeer();
+  if (!pc || pc.signalingState === "closed") return;
 
-    if (data.sdp) {
-        await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-
-        if (data.sdp.type === "offer") {
-            const answer = await pc.createAnswer();
-            await pc.setLocalDescription(answer);
-            socket.emit("signal", { room, sdp: answer });
-        }
+  if (data.sdp) {
+    try {
+      const patched = { type: data.sdp.type, sdp: patchSdp(data.sdp.sdp) };
+      await pc.setRemoteDescription(new RTCSessionDescription(patched));
+    } catch (e) {
+      console.warn("setRemoteDescription:", e);
+      return;
     }
 
-    if (data.candidate) {
-        try {
-            await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-        } catch (e) {}
+    if (data.sdp.type === "offer") {
+      const answer = await pc.createAnswer();
+      answer.sdp = patchSdp(answer.sdp);
+      await pc.setLocalDescription(answer);
+      socket.emit("signal", { room, sdp: pc.localDescription });
+
+      // Применяем битрейт после negotiation (encodings уже инициализированы)
+      await applyBitrate(camSender,    BW_CAM);
+      await applyBitrate(screenSender, BW_SCREEN);
     }
+  }
+
+  if (data.candidate && pc.remoteDescription) {
+    try { await pc.addIceCandidate(new RTCIceCandidate(data.candidate)); }
+    catch (_) {}
+  }
 });
 
-// ---------------- PEER ----------------
-function createPeer() {
-    if (pc) pc.close();
+// ── join / leave ──────────────────────────────────────────────────────────────
 
-    pc = new RTCPeerConnection(config);
-
-    pc.onicecandidate = (e) => {
-        if (e.candidate) {
-            socket.emit("signal", { room, candidate: e.candidate });
-        }
-    };
-
-    pc.ontrack = (e) => {
-        const stream = e.streams[0];
-        if (!stream) return;
-
-        if (e.track.kind === "audio") {
-            let audio = document.getElementById("audio-" + stream.id);
-
-            if (!audio) {
-                audio = document.createElement("audio");
-                audio.autoplay = true;
-                audio.id = "audio-" + stream.id;
-                document.body.appendChild(audio);
-            }
-
-            audio.srcObject = stream;
-            return;
-        }
-
-        if (e.track.kind === "video") {
-            let video = remoteVideos.get(stream.id);
-
-            if (!video) {
-                video = document.createElement("video");
-                video.autoplay = true;
-                video.playsInline = true;
-                video.style.width = "320px";
-                video.style.background = "#000";
-
-                document.getElementById("remoteVideos").appendChild(video);
-                remoteVideos.set(stream.id, video);
-
-                stream.onremovetrack = () => {
-                    video.remove();
-                    remoteVideos.delete(stream.id);
-                };
-            }
-
-            video.srcObject = stream;
-        }
-    };
-}
-
-// ---------------- JOIN ----------------
 async function joinRoom() {
-    if (joined) return;
+  if (joined) return;
 
-    room = document.getElementById("room").value.trim();
-    if (!room) return alert("Enter room id");
+  room = $("room").value.trim();
+  if (!room) { alert("Enter room id"); return; }
 
-    // reset old pc if exists
-    if (pc) {
-        pc.close();
-        pc = null;
-    }
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia(AUDIO_CFG);
+  } catch (e) {
+    alert("Mic error: " + e.message);
+    return;
+  }
 
-    try {
-        localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch (e) {
-        return alert("Mic error: " + e.message);
-    }
-
-    createPeer();
-
-    localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
-
-    socket.emit("join", { room });
-
-    setTimeout(() => {
-        renegotiate();
-    }, 300);
-
-    joined = true;
-
-    document.getElementById("camBtn").disabled = false;
-    document.getElementById("screenBtn").disabled = false;
-    document.getElementById("leaveBtn").disabled = false;
-
-    setStatus("Joined room");
+  joined = true;
+  setupPeer();
+  socket.emit("join", { room });
+  setUi(true);
+  log("Joined: " + room);
 }
 
-// ---------------- LEAVE ----------------
 async function leaveRoom() {
-    setStatus("Leaving room...");
+  stopTracks(camStream);    camStream    = null;
+  stopTracks(screenStream); screenStream = null;
+  stopTracks(localStream);  localStream  = null;
 
-    if (cameraStream) {
-        cameraStream.getTracks().forEach(t => t.stop());
-        cameraStream = null;
-    }
+  closePeer();
+  clearRemote();
 
-    if (screenStream) {
-        screenStream.getTracks().forEach(t => t.stop());
-        screenStream = null;
-    }
+  $("lCam").srcObject    = null;
+  $("lScreen").srcObject = null;
 
-    if (pc) {
-        pc.close();
-        pc = null;
-    }
+  socket.emit("leave", { room });
 
-    remoteVideos.clear();
+  room   = null;
+  joined = false;
+  muted  = false;
 
-    document.getElementById("localVideos").innerHTML = "";
-    document.getElementById("remoteVideos").innerHTML = "";
-    document.getElementById("users").innerHTML = "";
-
-    socket.emit("leave", { room });
-
-    room = null;
-    joined = false;
-
-    document.getElementById("camBtn").disabled = true;
-    document.getElementById("screenBtn").disabled = true;
-    document.getElementById("leaveBtn").disabled = true;
-
-    setStatus("Left room");
+  resetUi();
+  log("Left room");
 }
 
-// ---------------- RENEGOTIATE ----------------
-async function renegotiate() {
-    if (!pc) return;
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    socket.emit("signal", { room, sdp: offer });
+// ── mute ──────────────────────────────────────────────────────────────────────
+
+function toggleMute() {
+  if (!localStream) return;
+  muted = !muted;
+  localStream.getAudioTracks().forEach(t => { t.enabled = !muted; });
+  const b = $("btnMute");
+  b.textContent = muted ? "🔇 Unmute" : "🎙 Mute";
+  b.classList.toggle("mute", muted);
 }
 
-// ---------------- CAMERA ----------------
+// ── camera ────────────────────────────────────────────────────────────────────
+
 async function toggleCamera() {
-    if (camBusy) return;
-    camBusy = true;
-
-    const btn = document.getElementById("camBtn");
-    btn.disabled = true;
-
-    try {
-        if (!cameraStream) {
-            cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
-
-            const video = document.createElement("video");
-            video.id = "localCam";
-            video.autoplay = true;
-            video.playsInline = true;
-            video.muted = true;
-            video.style.width = "320px";
-            video.srcObject = cameraStream;
-
-            document.getElementById("localVideos").appendChild(video);
-
-            const track = cameraStream.getVideoTracks()[0];
-
-            if (!pc.getSenders().some(s => s.track === track)) {
-                cameraSender = pc.addTrack(track, cameraStream);
-            }
-
-            btn.textContent = "⛔ Выключить вебку";
-
-        } else {
-            cameraStream.getTracks().forEach(t => t.stop());
-
-            if (cameraSender) {
-                pc.removeTrack(cameraSender);
-                cameraSender = null;
-            }
-
-            cameraStream = null;
-
-            const v = document.getElementById("localCam");
-            if (v) v.remove();
-
-            btn.textContent = "📷 Включить вебку";
-        }
-
-        await renegotiate();
-
-    } catch (e) {
-        alert("Camera error: " + e.message);
+  const b = $("btnCam");
+  b.disabled = true;
+  try {
+    if (!camStream) {
+      camStream = await navigator.mediaDevices.getUserMedia(CAM_CFG);
+      await camSender.replaceTrack(camStream.getVideoTracks()[0]);
+      await applyBitrate(camSender, BW_CAM);
+      $("lCam").srcObject = camStream;
+      b.textContent = "⛔ Camera";
+      b.classList.add("on");
+    } else {
+      stopTracks(camStream); camStream = null;
+      await camSender.replaceTrack(blackTrack());
+      $("lCam").srcObject = null;
+      b.textContent = "📷 Camera";
+      b.classList.remove("on");
     }
-
-    btn.disabled = false;
-    camBusy = false;
+  } catch (e) { alert("Camera error: " + e.message); }
+  b.disabled = false;
 }
 
-// ---------------- SCREEN ----------------
+// ── screen ────────────────────────────────────────────────────────────────────
+
 async function toggleScreen() {
-    const btn = document.getElementById("screenBtn");
-
-    try {
-        if (!screenStream) {
-            screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-
-            const video = document.createElement("video");
-            video.id = "localScreen";
-            video.autoplay = true;
-            video.playsInline = true;
-            video.muted = true;
-            video.style.width = "320px";
-            video.srcObject = screenStream;
-
-            document.getElementById("localVideos").appendChild(video);
-
-            screenSender = pc.addTrack(screenStream.getVideoTracks()[0], screenStream);
-
-            screenStream.getVideoTracks()[0].onended = () => toggleScreen();
-
-            btn.textContent = "⛔ Выключить экран";
-
-        } else {
-            screenStream.getTracks().forEach(t => t.stop());
-
-            if (screenSender) {
-                pc.removeTrack(screenSender);
-                screenSender = null;
-            }
-
-            screenStream = null;
-
-            const v = document.getElementById("localScreen");
-            if (v) v.remove();
-
-            btn.textContent = "🖥️ Включить экран";
-        }
-
-        await renegotiate();
-
-    } catch (e) {
-        alert("Screen error: " + e.message);
+  const b = $("btnScreen");
+  b.disabled = true;
+  try {
+    if (!screenStream) {
+      screenStream = await navigator.mediaDevices.getDisplayMedia(SCREEN_CFG);
+      const track = screenStream.getVideoTracks()[0];
+      await screenSender.replaceTrack(track);
+      await applyBitrate(screenSender, BW_SCREEN);
+      $("lScreen").srcObject = screenStream;
+      track.onended = () => toggleScreen();
+      b.textContent = "⛔ Screen";
+      b.classList.add("on");
+    } else {
+      stopTracks(screenStream); screenStream = null;
+      await screenSender.replaceTrack(blackTrack());
+      $("lScreen").srcObject = null;
+      b.textContent = "🖥 Screen";
+      b.classList.remove("on");
     }
+  } catch (e) { alert("Screen error: " + e.message); }
+  b.disabled = false;
 }
-</script>
 
+// ── ui helpers ────────────────────────────────────────────────────────────────
+
+function setUi(inRoom) {
+  $("btnJoin").disabled   =  inRoom;
+  $("btnLeave").disabled  = !inRoom;
+  $("btnMute").disabled   = !inRoom;
+  $("btnCam").disabled    = !inRoom;
+  $("btnScreen").disabled = !inRoom;
+}
+
+function resetUi() {
+  setUi(false);
+  $("btnMute").textContent   = "🎙 Mute";
+  $("btnCam").textContent    = "📷 Camera";
+  $("btnScreen").textContent = "🖥 Screen";
+  $("btnMute").classList.remove("mute");
+  $("btnCam").classList.remove("on");
+  $("btnScreen").classList.remove("on");
+  $("users").textContent = "";
+}
+
+// ── wire up buttons ───────────────────────────────────────────────────────────
+
+$("btnJoin").addEventListener("click",   joinRoom);
+$("btnLeave").addEventListener("click",  leaveRoom);
+$("btnMute").addEventListener("click",   toggleMute);
+$("btnCam").addEventListener("click",    toggleCamera);
+$("btnScreen").addEventListener("click", toggleScreen);
+</script>
 </body>
 </html>
