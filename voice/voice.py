@@ -122,5 +122,5 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=8080,
         allow_unsafe_werkzeug=True,
-        ssl_context=("voice/cert.pem", "voice/key.pem"),
+        ssl_context=("cert.pem", "key.pem"),
     )
