@@ -196,7 +196,18 @@ video:-webkit-full-screen { width:100vw; height:100vh; object-fit:contain; backg
 
 // ── config ────────────────────────────────────────────────────────────────────
 
-const ICE_CFG = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+//const ICE_CFG = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+const ICE_CFG = {
+  iceServers: [
+    { urls: "stun:stun.l.google.com:19302" },
+
+    {
+      urls: "turn:185.103.252.46:3478",
+      username: "webrtc",
+      credential: "webrtc123"
+    }
+  ]
+};
 
 const AUDIO_CFG = { audio: {
   echoCancellation: true,

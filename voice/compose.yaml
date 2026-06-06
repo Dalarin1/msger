@@ -1,0 +1,25 @@
+version: "3.9"
+
+services:
+  voice:
+    build: .
+    container_name: voice-chat
+    ports:
+      - "443:8080"
+    restart: unless-stopped
+
+  turn:
+    image: instrumentisto/coturn
+    container_name: coturn
+    restart: unless-stopped
+    ports:
+      - "3478:3478/tcp"
+      - "3478:3478/udp"
+    command: >
+      -n
+      --log-file=stdout
+      --lt-cred-mech
+      --user=webrtc:webrtc123
+      --realm=webrtc.local
+      --min-port=50000
+      --max-port=50100
