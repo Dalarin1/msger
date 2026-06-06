@@ -12,14 +12,28 @@ services:
     image: instrumentisto/coturn
     container_name: coturn
     restart: unless-stopped
+
     ports:
       - "3478:3478/tcp"
       - "3478:3478/udp"
+      - "5349:5349/tcp"
+      - "50000-50100:50000-50100/udp"
+
     command: >
       -n
       --log-file=stdout
       --lt-cred-mech
+      --fingerprint
       --user=webrtc:webrtc123
       --realm=webrtc.local
+
+      --listening-ip=0.0.0.0
+      --relay-ip=0.0.0.0
+
       --min-port=50000
       --max-port=50100
+
+      --external-ip=185.103.252.46
+
+      --no-multicast-peers
+      --no-loopback-peers
