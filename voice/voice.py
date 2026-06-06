@@ -1,6 +1,7 @@
 from flask import Flask, send_file, request
 from flask_socketio import SocketIO, join_room, emit, leave_room
 import logging
+from gevent.pywsgi import WSGIServer
 
 log = logging.getLogger("werkzeug")
 log.setLevel(logging.ERROR)
@@ -9,10 +10,9 @@ app = Flask(__name__)
 socketio = SocketIO(
     app,
     cors_allowed_origins="*",
-    async_mode="threading",
-    allow_upgrades=True,
-    engineio_logger=False,
+    async_mode="gevent",
     logger=False,
+    engineio_logger=False,
 )
 
 # room_id -> { users: [sid, ...], offerer: sid|None }
@@ -117,10 +117,10 @@ def on_disconnect():
 # ── entry ─────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    socketio.run(
+    http_server = WSGIServer(
+        ("0.0.0.0", 8080),
         app,
-        host="0.0.0.0",
-        port=8080,
-        allow_unsafe_werkzeug=True,
-        ssl_context=("cert.pem", "key.pem"),
+        keyfile="key.pem",
+        certfile="cert.pem",
     )
+    http_server.serve_forever()
