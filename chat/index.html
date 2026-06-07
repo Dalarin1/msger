@@ -133,6 +133,75 @@ main {
     font-family: system-ui, sans-serif;
 }
 #sendBtn:hover { opacity: .9; }
+
+/* ── auth modal ── */
+#authOverlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.35);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+}
+#authOverlay.visible { display: flex; }
+
+#authCard {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 16px;
+    padding: 28px 32px;
+    width: 320px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    position: relative;
+}
+
+#authCard .close-btn {
+    position: absolute;
+    top: 14px; right: 16px;
+    background: none;
+    border: none;
+    font-size: 18px;
+    color: #999;
+    cursor: pointer;
+    line-height: 1;
+    padding: 2px 6px;
+    border-radius: 6px;
+}
+#authCard .close-btn:hover { background: #f3f4f6; color: #111; }
+
+#authCard h2 {
+    font-size: 16px;
+    font-weight: 700;
+    color: #111;
+    margin-right: 24px;
+}
+
+#authCard p {
+    font-size: 14px;
+    color: #555;
+    line-height: 1.5;
+}
+
+.auth-btn {
+    display: block;
+    text-align: center;
+    padding: 10px;
+    border-radius: 20px;
+    font-size: 14px;
+    font-family: system-ui, sans-serif;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    transition: opacity .12s;
+}
+.auth-btn.primary { background: black; color: white; border: none; }
+.auth-btn.secondary { background: white; color: #111; border: 1px solid #e5e7eb; }
+.auth-btn:hover { opacity: .82; }
 </style>
 </head>
 <body>
@@ -151,34 +220,43 @@ main {
     </div>
 
     <div id="messages"></div>
-    <div id="registerPopUp">
-        <p></p> <!-- Здесь должон быть текст с предложением залогиниться -->
-        <button id="gotoLogin"></button>
-        <a href="/login#register">У меня ещё нет аккаунта</a>
-    </div>
+
     <div id="inputBar">
         <input id="textInput" placeholder="Сообщение...">
         <button id="sendBtn">Отправить</button>
     </div>
 </main>
 
+<div id="authOverlay">
+    <div id="authCard">
+        <button class="close-btn" onclick="hideAuthModal()">✕</button>
+        <h2>Нужен аккаунт</h2>
+        <p>Чтобы писать в чат, войди или создай аккаунт — это займёт секунду.</p>
+        <a class="auth-btn primary" href="/login">Войти</a>
+        <a class="auth-btn secondary" href="/login#register">Зарегистрироваться</a>
+    </div>
+</div>
+
 <script>
 const messagesEl = document.getElementById("messages");
 const statusEl   = document.getElementById("status");
 const input      = document.getElementById("textInput");
+const overlay    = document.getElementById("authOverlay");
 
 let myId = localStorage.getItem("id");
 
+/* ── modal ── */
+function showAuthModal() { overlay.classList.add("visible"); }
+function hideAuthModal()  { overlay.classList.remove("visible"); }
 
-// если myId не задан, сделать видимым объект "хотите зарегистрироваться?", а остальное за ним затемнить
-async function ensureRegistered() {
-    if (myId) return;
-    // const name = prompt("Введи имя:") || "anon";
-    // const res  = await fetch(`/register?name=${encodeURIComponent(name)}`);
-    // const data = await res.json();
-    // myId = data.id;
-    // localStorage.setItem("id",   myId);
-    // localStorage.setItem("name", data.name);
+overlay.addEventListener("click", e => { if (e.target === overlay) hideAuthModal(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") hideAuthModal(); });
+
+// Возвращает true если авторизован, иначе показывает модалку и возвращает false
+function ensureRegistered() {
+    if (myId) return true;
+    showAuthModal();
+    return false;
 }
 
 function add(msg) {
@@ -211,14 +289,14 @@ ws.onmessage = (e) => {
 async function send() {
     const text = input.value.trim();
     if (!text) return;
-    if (!myId) { myId = await ensureRegistered(); }
+    if (!ensureRegistered()) return;
     const res  = await fetch(`/send_msg?text=${encodeURIComponent(text)}&id=${myId}`);
     const data = await res.json();
     if (data.type === "register") {
         localStorage.removeItem("id");
         myId = null;
-        await ensureRegistered();
-        await fetch(`/send_msg?text=${encodeURIComponent(text)}&id=${myId}`);
+        ensureRegistered();
+        return;
     }
     input.value = "";
 }
@@ -226,6 +304,7 @@ async function send() {
 input.addEventListener("keydown", e => { if (e.key === "Enter") send(); });
 document.getElementById("sendBtn").addEventListener("click", send);
 
+// показать модалку при загрузке, если не залогинен
 ensureRegistered();
 </script>
 </body>

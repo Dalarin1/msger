@@ -3,7 +3,6 @@ version: "3.9"
 services:
   chat:
     build: ./chat
-    container_name: chat
     ports:
       - "80:80"
     restart: unless-stopped
@@ -14,14 +13,12 @@ services:
 
   voice:
     build: ./voice
-    container_name: voice-chat
     ports:
       - "443:8080"
     restart: unless-stopped
 
   turn:
     image: instrumentisto/coturn
-    container_name: coturn
     restart: unless-stopped
     network_mode: host
     volumes:

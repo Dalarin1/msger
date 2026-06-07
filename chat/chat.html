@@ -186,6 +186,40 @@ main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 .btn-open   { background: black; color: white; flex: 2; }
 .btn-cancel:hover { background: #e5e7eb; }
 .btn-open:hover   { opacity: .9; }
+
+/* ── auth overlay ── */
+#authOverlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.35);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 200;
+    align-items: center; justify-content: center;
+}
+#authOverlay.visible { display: flex; }
+#authCard {
+    background: white; border: 1px solid #e5e7eb;
+    border-radius: 16px; padding: 28px 32px;
+    width: 320px; display: flex; flex-direction: column; gap: 16px;
+    position: relative;
+}
+#authCard .close-btn {
+    position: absolute; top: 14px; right: 16px;
+    background: none; border: none; font-size: 18px;
+    color: #999; cursor: pointer; padding: 2px 6px; border-radius: 6px;
+}
+#authCard .close-btn:hover { background: #f3f4f6; color: #111; }
+#authCard h2 { font-size: 16px; font-weight: 700; color: #111; margin-right: 24px; }
+#authCard p  { font-size: 14px; color: #555; line-height: 1.5; }
+.auth-btn {
+    display: block; text-align: center; padding: 10px;
+    border-radius: 20px; font-size: 14px; font-family: system-ui, sans-serif;
+    font-weight: 600; cursor: pointer; text-decoration: none; transition: opacity .12s;
+}
+.auth-btn.primary   { background: black; color: white; border: none; }
+.auth-btn.secondary { background: white; color: #111; border: 1px solid #e5e7eb; }
+.auth-btn:hover { opacity: .82; }
 </style>
 </head>
 <body>
@@ -227,7 +261,7 @@ main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
     </div>
 </main>
 
-<!-- modal -->
+<!-- new chat modal -->
 <div id="modal">
     <div class="modal-box">
         <h3>Новый чат</h3>
@@ -243,28 +277,42 @@ main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
     </div>
 </div>
 
+<!-- auth overlay -->
+<div id="authOverlay">
+    <div id="authCard">
+        <button class="close-btn" onclick="hideAuthModal()">✕</button>
+        <h2>Нужен аккаунт</h2>
+        <p>Чтобы открывать чаты и писать сообщения, войди или создай аккаунт.</p>
+        <a class="auth-btn primary" href="/login">Войти</a>
+        <a class="auth-btn secondary" href="/login#register">Зарегистрироваться</a>
+    </div>
+</div>
+
 <script>
 let myId = localStorage.getItem("id");
 let allChats = [];
 let currentChatId = null;
 let ws = null;
 
+/* ── auth modal ── */
+const authOverlay = document.getElementById("authOverlay");
+function showAuthModal() { authOverlay.classList.add("visible"); }
+function hideAuthModal()  { authOverlay.classList.remove("visible"); }
+authOverlay.addEventListener("click", e => { if (e.target === authOverlay) hideAuthModal(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && authOverlay.classList.contains("visible")) hideAuthModal(); });
+
+function ensureRegistered() {
+    if (myId) return true;
+    showAuthModal();
+    return false;
+}
+
 (async () => {
-    await ensureRegistered();
+    if (!ensureRegistered()) return;
     await loadChats();
     const withId = new URLSearchParams(location.search).get("with");
     if (withId) await openChat(withId);
 })();
-
-async function ensureRegistered() {
-    if (myId) return;
-    const name = prompt("Введи своё имя:") || "anon";
-    const res  = await fetch(`/register?name=${encodeURIComponent(name)}`);
-    const data = await res.json();
-    myId = data.id;
-    localStorage.setItem("id",   myId);
-    localStorage.setItem("name", data.name);
-}
 
 // ── list ──────────────────────────────────────────
 async function loadChats() {
@@ -376,6 +424,7 @@ function addMessage(msg) {
 }
 
 async function sendMessage() {
+    if (!ensureRegistered()) return;
     const input = document.getElementById("msgInput");
     const text  = input.value.trim();
     if (!text || !currentChatId) return;
@@ -405,6 +454,7 @@ function goToList() {
 
 // ── modal ─────────────────────────────────────────
 function openModal() {
+    if (!ensureRegistered()) return;
     document.getElementById("targetIdInput").value = "";
     document.getElementById("modalError").style.display = "none";
     document.getElementById("modal").classList.add("open");
