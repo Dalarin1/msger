@@ -3,3 +3,5 @@ uvicorn
 flask
 flask_socketio
 websockets
+PyJWT
+cryptography

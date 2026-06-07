@@ -1,0 +1,41 @@
+CREATE TABLE IF NOT EXISTS members (
+    id TEXT PRIMARY KEY,
+    password_hash TEXT NOT NULL UNIQUE,
+    name TEXT,
+    created_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+    jti TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL UNIQUE,
+    expired_at TEXT NOT NULL,
+    revoked INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (user_id) REFERENCES members(id)
+);
+
+CREATE TABLE IF NOT EXISTS chats (
+    chat_id TEXT,
+    user_id TEXT,
+    other_id TEXT,
+    PRIMARY KEY (chat_id, user_id),
+    FOREIGN KEY (user_id) REFERENCES members(id),
+    FOREIGN KEY (other_id) REFERENCES members(id)
+);
+
+CREATE TABLE IF NOT EXISTS global_messages (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    sender_id TEXT NOT NULL,
+    sender    TEXT NOT NULL,
+    text      TEXT NOT NULL,
+    timestamp TEXT NOT NULL,
+    FOREIGN KEY (sender_id) REFERNCES members(id)
+);
+
+CREATE TABLE IF NOT EXISTS p2p_messages (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    chat_id   TEXT NOT NULL,
+    sender_id TEXT NOT NULL,
+    sender    TEXT NOT NULL,
+    text      TEXT NOT NULL,
+    timestamp TEXT NOT NULL
+);
