@@ -147,12 +147,12 @@ def _row_to_msg(row: sqlite3.Row) -> dict:
 def get_global_history(limit: int = 100, before_id: int | None = None) -> list[dict]:
     if before_id:  # подгружаем историю чата после N-ного соо.
         cursor.execute(
-            "SELECT id, sender, sender_id, text, timestamp  FROM gloabal_messages WHERE id < ? ORDER BY id DESC LIMIT ?",
+            "SELECT id, sender, sender_id, text, timestamp  FROM global_messages WHERE id < ? ORDER BY id DESC LIMIT ?",
             (before_id, limit),
         )
     else:  # грузим последние 100
         cursor.execute(
-            "SELECT id, sender, sender_id, text, timestamp  FROM gloabal_messages ORDER BY id DESC LIMIT ?",
+            "SELECT id, sender, sender_id, text, timestamp  FROM global_messages ORDER BY id DESC LIMIT ?",
             (limit,),
         )
 

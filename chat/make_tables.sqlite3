@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS global_messages (
     sender    TEXT NOT NULL,
     text      TEXT NOT NULL,
     timestamp TEXT NOT NULL,
-    FOREIGN KEY (sender_id) REFERNCES members(id)
+    FOREIGN KEY (sender_id) REFERENCES members(id)
 );
 
 CREATE TABLE IF NOT EXISTS p2p_messages (
