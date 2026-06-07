@@ -2,6 +2,8 @@ from flask import Flask, send_file, request
 from flask_socketio import SocketIO, join_room, emit, leave_room
 import logging
 from gevent.pywsgi import WSGIServer
+from gevent.pywsgi import WSGIServer
+from geventwebsocket.handler import WebSocketHandler
 
 log = logging.getLogger("werkzeug")
 log.setLevel(logging.ERROR)
@@ -116,11 +118,14 @@ def on_disconnect():
 
 # ── entry ─────────────────────────────────────────────────────────────────────
 
+# Стало:
+
 if __name__ == "__main__":
     http_server = WSGIServer(
         ("0.0.0.0", 8080),
         app,
         keyfile="key.pem",
         certfile="cert.pem",
+        handler_class=WebSocketHandler,
     )
     http_server.serve_forever()

@@ -12,23 +12,21 @@ services:
     image: instrumentisto/coturn
     container_name: coturn
     restart: unless-stopped
-
     network_mode: host
-
+    volumes:
+      - ./cert.pem:/etc/coturn/cert.pem:ro
+      - ./key.pem:/etc/coturn/key.pem:ro
     command: >
       -n
       --log-file=stdout
-
       --lt-cred-mech
       --fingerprint
-
       --user=webrtc:webrtc123
       --realm=webrtc.local
-
       --listening-port=3478
       --tls-listening-port=5349
-
+      --cert=/etc/coturn/cert.pem
+      --pkey=/etc/coturn/key.pem
       --min-port=50000
       --max-port=50100
-
       --external-ip=185.103.252.46
