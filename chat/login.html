@@ -252,6 +252,10 @@
     </main>
 
     <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            if (location.hash === "#register") {switchTab("register");}
+        });
+
         function switchTab(tab) {
             document.getElementById("tab-login").classList.toggle("active", tab === "login");
             document.getElementById("tab-register").classList.toggle("active", tab === "register");
@@ -277,13 +281,13 @@
             // ok == true? -> redirect на /, иначе alert "Вставай, ты обосрался"
 
             const hash = await getSHA256Hash(name + password);
-            const res = await fetch(`/login`, { 
+            const res = await fetch(`/login`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json", "oleg-login-hash": hash }, 
+                headers: { "Content-Type": "application/json", "oleg-login-hash": hash },
             });
             const data = await res.json();
 
-            if(data.ok){
+            if (data.ok) {
                 localStorage.setItem("id", data.id);
                 localStorage.setItem("name", name);
                 location.href = "/";
@@ -302,7 +306,7 @@
             const hash = await getSHA256Hash(name + pass);
             const res = await fetch(`/register`, {
                 method: "POST",
-                headers: {"oleg-name": name, "oleg-login-hash": hash}
+                headers: { "oleg-name": name, "oleg-login-hash": hash }
             });
             const data = await res.json();
 

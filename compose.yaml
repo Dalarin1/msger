@@ -21,7 +21,6 @@ services:
 
   turn:
     image: instrumentisto/coturn
-    container_name: coturn
     restart: unless-stopped
     network_mode: host
     volumes:
