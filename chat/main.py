@@ -67,6 +67,7 @@ def make_environ() -> None:
 
 #  JWT
 
+
 def _now_utc() -> datetime:
     return datetime.now(tz=timezone.utc)
 
@@ -132,6 +133,7 @@ def get_current_user(
 
 #    HELPERS
 
+
 def _row_to_msg(row: sqlite3.Row) -> dict:
     return {
         "id": row["id"],
@@ -195,12 +197,14 @@ def get_p2p_history(
 def save_p2p_msg(chat_id: str, sender_id: str, sender: str, text: str) -> dict:
     ts = _now_utc().isoformat()
     cursor.execute(
-        "INSERT INTO p2p_messages (sender_id, sender, text, timestamp) VALUES (?, ?, ?, ?)",
-        (chat_id, sender_id, sender, text),
+        "INSERT INTO p2p_messages (chat_id, sender_id, sender, text, timestamp) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (chat_id, sender_id, sender, text, ts),
     )
     conn.commit()
     return {
-        "id": cur.lastrowid,
+        "id": cursor.lastrowid,
+        "chat_id": chat_id,
         "sender": sender,
         "sender_id": sender_id,
         "text": text,
@@ -224,6 +228,7 @@ def make_p2p_chat(id_1: str, id_2: str) -> str:
 
     return chat_id
 
+
 # ---------------------------------------------------------------------------
 # WebSocket-клиенты
 # ---------------------------------------------------------------------------
@@ -232,6 +237,7 @@ global_clients: list[WebSocket] = []
 p2p_clients: dict[str, list[WebSocket]] = {}
 
 # STATIC
+
 
 @app.get("/", response_class=HTMLResponse)
 async def get_index():
@@ -265,8 +271,9 @@ async def get_login_page():
 
 # Авторизация
 
+
 @app.post("/auth/register")
-async def register(request: fastapi.Request) -> dict: 
+async def register(request: fastapi.Request) -> dict:
     """
     Заголовки:
       oleg-password-hash  — sha256(login + password), уникальный ключ
@@ -287,20 +294,23 @@ async def register(request: fastapi.Request) -> dict:
 
     user_id = str(uuid.uuid4())
 
-    cursor.execute("INSERT INTO members (id, password_hash, name, created_at) VALUES (?, ?, ?, ?)", 
-                   (user_id, password_hash, username, _now_utc().isoformat()))
+    cursor.execute(
+        "INSERT INTO members (id, password_hash, name, created_at) VALUES (?, ?, ?, ?)",
+        (user_id, password_hash, username, _now_utc().isoformat()),
+    )
     conn.commit()
 
     return {
         "ok": True,
         "id": user_id,
         "access_token": create_token(user_id),
-        "refresh_token":create_refresh_token(user_id),
-        "token_type": "bearer"
+        "refresh_token": create_refresh_token(user_id),
+        "token_type": "bearer",
     }
 
+
 @app.post("/auth/login")
-async def login(request: fastapi.Request) -> dict: 
+async def login(request: fastapi.Request) -> dict:
     """
     Заголовок:
       oleg-password-hash  — sha256(login + password)
@@ -310,7 +320,9 @@ async def login(request: fastapi.Request) -> dict:
     if not password_hash:
         raise HTTPException(400, "oleg-password-hash missing")
 
-    row = cursor.execute("SELECT id FROM members WHERE password_hash = ?", (password_hash, )).fetchone()
+    row = cursor.execute(
+        "SELECT id FROM members WHERE password_hash = ?", (password_hash,)
+    ).fetchone()
     if not row:
         raise HTTPException(401, "Wrong login or password")
 
@@ -319,12 +331,13 @@ async def login(request: fastapi.Request) -> dict:
         "ok": True,
         "id": user_id,
         "access_token": create_token(user_id),
-        "refresh_token":create_refresh_token(user_id),
-        "token_type": "bearer"
+        "refresh_token": create_refresh_token(user_id),
+        "token_type": "bearer",
     }
 
+
 @app.post("/auth/refresh")
-async def refresh_tokens(request: fastapi.Request) -> dict: 
+async def refresh_tokens(request: fastapi.Request) -> dict:
     """
     Body JSON: { "refresh_token": "..." }
     Возвращает новый access_token. Refresh-токен остаётся тем же.
@@ -336,9 +349,11 @@ async def refresh_tokens(request: fastapi.Request) -> dict:
     payload = decode_token(token)
 
     if payload.get("type") != "refresh":
-        raise HTTPException(401, "Wrong type, must be \"refresh\"")
-    
-    row = cursor.execute("SELECT expired_at FROM refresh_tokens WHERE jti = ?", (token, )).fetchone()
+        raise HTTPException(401, 'Wrong type, must be "refresh"')
+
+    row = cursor.execute(
+        "SELECT expired_at FROM refresh_tokens WHERE jti = ?", (token,)
+    ).fetchone()
     if not row:
         raise HTTPException(status_code=401, detail="Token not found")
     if row["revoked"]:
@@ -353,11 +368,14 @@ async def refresh_tokens(request: fastapi.Request) -> dict:
     return {
         "access_token": create_token(user_id),
         # "refresh_token": new_refresh,  # при rotation
-        "token_type":   "bearer",
+        "token_type": "bearer",
     }
 
+
 @app.post("/auth/logout")
-async def logout(request: fastapi.Request, current_user: dict = Depends(get_current_user)) -> dict: 
+async def logout(
+    request: fastapi.Request, current_user: dict = Depends(get_current_user)
+) -> dict:
     body = await request.json()
     token = body.get("refresh_token", "")
     try:
@@ -368,8 +386,9 @@ async def logout(request: fastapi.Request, current_user: dict = Depends(get_curr
         pass
     return {"ok": True}
 
+
 @app.post("/auth/logout_all")
-async def logout_all(current_user: dict = Depends(get_current_user)) -> dict: 
+async def logout_all(current_user: dict = Depends(get_current_user)) -> dict:
     """Инвалидирует все refresh-токены пользователя (выход на всех устройствах)."""
     cursor.execute(
         "UPDATE refresh_tokens SET revoked=1 WHERE user_id=?",
@@ -378,7 +397,9 @@ async def logout_all(current_user: dict = Depends(get_current_user)) -> dict:
     conn.commit()
     return {"ok": True}
 
+
 # GLOBAL CHAT
+
 
 @app.post("/send_msg")
 async def send_msg(
@@ -393,11 +414,11 @@ async def send_msg(
         raise HTTPException(status_code=400, detail="Empty message")
 
     user_id = current_user["sub"]
-    row = cursor.execute("SELECT name FROM members WHERE id = ?", (user_id, )).fetchone()
+    row = cursor.execute("SELECT name FROM members WHERE id = ?", (user_id,)).fetchone()
 
     if not row:
         raise HTTPException(403, "Username not found")
-    
+
     msg = save_global_msg(user_id, row["name"], text)
     dead = []
     for ws in global_clients:
@@ -410,6 +431,7 @@ async def send_msg(
             global_clients.remove(ws)
 
     return {"ok": True}
+
 
 @app.websocket("/ws")
 async def global_ws(ws: WebSocket):
@@ -425,7 +447,9 @@ async def global_ws(ws: WebSocket):
         if ws in global_clients:
             global_clients.remove(ws)
 
+
 # P2P CHATS
+
 
 @app.get("/chat/open")
 async def open_chat(
@@ -438,6 +462,7 @@ async def open_chat(
         raise HTTPException(status_code=404, detail="User not found")
     chat_id = make_p2p_chat(my_id, with_id)
     return {"chat_id": chat_id}
+
 
 @app.get("/my/chats")
 async def my_chats(current_user: dict = Depends(get_current_user)):
@@ -459,16 +484,18 @@ async def my_chats(current_user: dict = Depends(get_current_user)):
         last_msg = None
         if history:
             last_msg = {
-                "text":      history[-1]["text"],
+                "text": history[-1]["text"],
                 "timestamp": history[-1]["timestamp"],
                 "sender_id": history[-1]["sender_id"],
             }
-        result.append({
-            "chat_id":      chat_id,
-            "other_id":     other_id,
-            "other_name":   other_name or other_id[:8],
-            "last_message": last_msg,
-        })
+        result.append(
+            {
+                "chat_id": chat_id,
+                "other_id": other_id,
+                "other_name": other_name or other_id[:8],
+                "last_message": last_msg,
+            }
+        )
 
     result.sort(
         key=lambda x: x["last_message"]["timestamp"] if x["last_message"] else "",
