@@ -2,7 +2,7 @@ version: "3.9"
 
 services:
   voice:
-    build: .
+    build: ./voice
     container_name: voice-chat
     ports:
       - "443:8080"
