@@ -151,7 +151,11 @@ main {
     </div>
 
     <div id="messages"></div>
-
+    <div id="registerPopUp">
+        <p></p> <!-- Здесь должон быть текст с предложением залогиниться -->
+        <button id="gotoLogin"></button>
+        <a href="/login#register">У меня ещё нет аккаунта</a>
+    </div>
     <div id="inputBar">
         <input id="textInput" placeholder="Сообщение...">
         <button id="sendBtn">Отправить</button>
@@ -165,14 +169,16 @@ const input      = document.getElementById("textInput");
 
 let myId = localStorage.getItem("id");
 
+
+// если myId не задан, сделать видимым объект "хотите зарегистрироваться?", а остальное за ним затемнить
 async function ensureRegistered() {
     if (myId) return;
-    const name = prompt("Введи имя:") || "anon";
-    const res  = await fetch(`/register?name=${encodeURIComponent(name)}`);
-    const data = await res.json();
-    myId = data.id;
-    localStorage.setItem("id",   myId);
-    localStorage.setItem("name", data.name);
+    // const name = prompt("Введи имя:") || "anon";
+    // const res  = await fetch(`/register?name=${encodeURIComponent(name)}`);
+    // const data = await res.json();
+    // myId = data.id;
+    // localStorage.setItem("id",   myId);
+    // localStorage.setItem("name", data.name);
 }
 
 function add(msg) {

@@ -7,10 +7,9 @@ import sqlite3
 import uuid
 import os
 
-from pathlib import Path
 from datetime import datetime
 from fastapi import WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 
 app = fastapi.FastAPI()
 
@@ -43,6 +42,7 @@ def make_environ() -> None:
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS members (
         id TEXT PRIMARY KEY,
+        password_hash TEXT NOT NULL UNIQUE,
         name TEXT,
         created_at TEXT
     )""")
@@ -57,6 +57,7 @@ def make_environ() -> None:
         other_id TEXT,
         PRIMARY KEY (chat_id, user_id)
     )""")
+
     conn.commit()
     if not os.path.exists(HEAD):
         with open(HEAD, "w") as f:
@@ -93,6 +94,7 @@ def get_history(limit=100):
 
 
 p2p_clients: dict[str, list[WebSocket]] = {}
+
 
 def get_chat_dir(chat_id: str) -> str:
     return os.path.join(P2P_CHATS_FOLDER, chat_id)
@@ -160,13 +162,59 @@ async def get_index():
 @app.get("/chat", response_class=HTMLResponse)
 async def get_chat_html():
     return HTMLResponse(open("chat.html").read())
+
+
 @app.get("/chat/", response_class=HTMLResponse)
 async def get_chat_html_2():
     return HTMLResponse(open("chat.html").read())
 
+
 @app.get("/profile", response_class=HTMLResponse)
 async def get_profile_html():
     return HTMLResponse(open("profile.html").read())
+
+
+@app.get("/login")
+async def get_login_page():
+    return HTMLResponse(open("login.html").read())
+
+
+# присылает
+# oleg-login-hash: sha3.any of [login + password]
+@app.post("/login")
+async def login_user(request: fastapi.Request):
+    password_hash = request.headers.get("oleg-login-hash")
+    if not password_hash:
+        return {"ok": False, "error": "Логин/пароль не переданы"}
+    cursor.execute("SELECT id FROM members WHERE password_hash=?", (password_hash,))
+    data = cursor.fetchone()
+    if not data:
+        return {
+            "ok": False,
+            "error": "Неверный логин или пароль",
+        }  # данные для логина говно
+    return {"ok": True, "id": data[1]}
+
+
+# TODO
+# выдать oleg-jwt юзеру
+# TODO-NOW
+# записать в базу Name, Hash, Id
+# выдать юзеру id
+@app.post("/register")
+async def register_better(request: fastapi.Request):
+    password_hash = request.headers.get("oleg-login-hash")
+    name = request.headers.get("oleg-name")
+    if not password_hash:
+        return {"ok": False, "error": "Логин/пароль не переданы"}
+    new_id = str(uuid.uuid4())
+    cursor.execute(
+        "INSERT INTO members (id,password_hash,name, created_at) VALUES (?, ?, ?, ?)",
+        (new_id, password_hash, name, datetime.now().isoformat()),
+    )
+    conn.commit()
+    
+    return {"ok": True, "id": new_id}
 
 
 @app.get("/register")
