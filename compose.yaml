@@ -14,7 +14,6 @@ services:
 
   voice:
     build: ./voice
-    container_name: voice-chat
     ports:
       - "443:8080"
     restart: unless-stopped

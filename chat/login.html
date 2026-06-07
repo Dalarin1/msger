@@ -251,6 +251,7 @@
         </div>
     </main>
 
+    <script src="sha256.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             if (location.hash === "#register") {switchTab("register");}
@@ -263,13 +264,13 @@
             document.getElementById("form-register").classList.toggle("hidden", tab !== "register");
         }
 
-        async function getSHA256Hash(str) {
-            const buf = new TextEncoder().encode(str);
-            const digest = await crypto.subtle.digest('SHA-256', buf);
-            return Array.from(new Uint8Array(digest))
-                .map(b => b.toString(16).padStart(2, '0'))
-                .join('');
-        }
+        // async function getSHA256Hash(str) {
+        //     const buf = new TextEncoder().encode(str);
+        //     const digest = await crypto.subtle.digest('SHA-256', buf);
+        //     return Array.from(new Uint8Array(digest))
+        //         .map(b => b.toString(16).padStart(2, '0'))
+        //         .join('');
+        // }
 
         async function handleLogin() {
             const name = document.getElementById("login-name").value.trim();
@@ -280,7 +281,7 @@
             // отправить через POST /login с хедером oleg-password-hash
             // ok == true? -> redirect на /, иначе alert "Вставай, ты обосрался"
 
-            const hash = await getSHA256Hash(name + password);
+            const hash = await sha256(name + password);
             const res = await fetch(`/login`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "oleg-login-hash": hash },
@@ -303,7 +304,7 @@
             if (!name) return;
             if (pass !== pass2) { alert("Пароли не совпадают"); return; }
 
-            const hash = await getSHA256Hash(name + pass);
+            const hash = await sha256(name + pass);
             const res = await fetch(`/register`, {
                 method: "POST",
                 headers: { "oleg-name": name, "oleg-login-hash": hash }

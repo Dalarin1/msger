@@ -9,16 +9,17 @@ import os
 
 from datetime import datetime
 from fastapi import WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
 
 app = fastapi.FastAPI()
 
-HEAD = "OLEG.TXT"
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 GLOBAL_CHAT_FOLDER = os.path.join(BASE_DIR, "global_chat")
 P2P_CHATS_FOLDER = os.path.join(BASE_DIR, "personal_chats")
 DATABASE_FOLDER = os.path.join(BASE_DIR, "database")
+
+HEAD = os.path.join(GLOBAL_CHAT_FOLDER, "HEAD.txt")
 
 members_db_path = os.path.join(DATABASE_FOLDER, "members.db")
 conn = None
@@ -158,6 +159,9 @@ def make_chat(id_1: str, id_2: str) -> str:
 async def get_index():
     return HTMLResponse(open("index.html").read())
 
+@app.get("/sha256.js")
+async def get_sha256():
+    return FileResponse("sha256.js", media_type="application/javascript")
 
 @app.get("/chat", response_class=HTMLResponse)
 async def get_chat_html():
@@ -213,7 +217,7 @@ async def register_better(request: fastapi.Request):
         (new_id, password_hash, name, datetime.now().isoformat()),
     )
     conn.commit()
-    
+
     return {"ok": True, "id": new_id}
 
 
