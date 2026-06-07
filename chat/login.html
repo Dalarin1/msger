@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Вход — Oleg Chat</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: system-ui, sans-serif;
+            background: #f6f7f9;
+            height: 100vh;
+            display: flex;
+        }
+
+        /* ── sidebar ── */
+        nav {
+            width: 200px;
+            background: white;
+            border-right: 1px solid #e5e7eb;
+            display: flex;
+            flex-direction: column;
+            padding: 20px 0;
+            flex-shrink: 0;
+        }
+
+        nav .logo {
+            font-size: 16px;
+            font-weight: 700;
+            padding: 0 20px 20px;
+            border-bottom: 1px solid #e5e7eb;
+            margin-bottom: 8px;
+        }
+
+        nav a {
+            display: block;
+            padding: 10px 20px;
+            text-decoration: none;
+            color: #555;
+            font-size: 14px;
+            transition: background .12s, color .12s;
+        }
+
+        nav a:hover {
+            background: #f3f4f6;
+            color: #111;
+        }
+
+        nav a.active {
+            background: #f3f4f6;
+            color: #111;
+            font-weight: 600;
+        }
+
+        /* ── main ── */
+        main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .topbar {
+            background: white;
+            border-bottom: 1px solid #e5e7eb;
+            padding: 14px 20px;
+            font-weight: 600;
+            font-size: 15px;
+        }
+
+        .content {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+        }
+
+        /* ── card ── */
+        .card {
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 16px;
+            padding: 32px;
+            width: 100%;
+            max-width: 380px;
+        }
+
+        /* ── tabs ── */
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid #e5e7eb;
+            margin-bottom: 24px;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            background: none;
+            border: none;
+            color: #999;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -1px;
+            transition: color .12s, border-color .12s;
+            font-family: system-ui, sans-serif;
+        }
+
+        .tab.active {
+            color: #111;
+            border-bottom-color: #111;
+        }
+
+        /* ── form ── */
+        .form {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .form.hidden {
+            display: none;
+        }
+
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .field label {
+            font-size: 12px;
+            color: #999;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+        }
+
+        .field input {
+            padding: 10px 14px;
+            border-radius: 20px;
+            border: 1px solid #ddd;
+            outline: none;
+            font-family: system-ui, sans-serif;
+            font-size: 14px;
+            color: #111;
+            transition: border-color .12s;
+        }
+
+        .field input:focus {
+            border-color: #111;
+        }
+
+        .submit-btn {
+            margin-top: 6px;
+            background: black;
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            font-family: system-ui, sans-serif;
+            font-weight: 600;
+            transition: opacity .12s;
+        }
+
+        .submit-btn:hover {
+            opacity: .88;
+        }
+
+        .hint {
+            font-size: 12px;
+            color: #999;
+            text-align: center;
+            margin-top: 4px;
+        }
+
+        .hint a {
+            color: #111;
+            font-weight: 600;
+            text-decoration: none;
+        }
+
+        .hint a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+
+<body>
+
+    <nav>
+        <div class="logo">Oleg Chat</div>
+        <a href="/">Главная</a>
+        <a href="/chat">Мои чаты</a>
+        <a href="/profile">Профиль</a>
+        <a href="/login" class="active">Войти</a>
+    </nav>
+
+    <main>
+        <div class="topbar">Вход / Регистрация</div>
+        <div class="content">
+            <div class="card">
+                <div class="tabs">
+                    <button class="tab active" id="tab-login" onclick="switchTab('login')">Войти</button>
+                    <button class="tab" id="tab-register" onclick="switchTab('register')">Регистрация</button>
+                </div>
+
+                <!-- Login form -->
+                <div class="form" id="form-login">
+                    <div class="field">
+                        <label>Имя пользователя</label>
+                        <input type="text" id="login-name" placeholder="Введи имя...">
+                    </div>
+                    <div class="field">
+                        <label>Пароль</label>
+                        <input type="password" id="login-password" placeholder="••••••••">
+                    </div>
+                    <button class="submit-btn" onclick="handleLogin()">Войти</button>
+                    <p class="hint">Нет аккаунта? <a href="#"
+                            onclick="switchTab('register'); return false;">Зарегистрируйся</a></p>
+                </div>
+
+                <!-- Register form -->
+                <div class="form hidden" id="form-register">
+                    <div class="field">
+                        <label>Имя пользователя</label>
+                        <input type="text" id="reg-name" placeholder="Придумай имя...">
+                    </div>
+                    <div class="field">
+                        <label>Пароль</label>
+                        <input type="password" id="reg-password" placeholder="••••••••">
+                    </div>
+                    <div class="field">
+                        <label>Повтори пароль</label>
+                        <input type="password" id="reg-password2" placeholder="••••••••">
+                    </div>
+                    <button class="submit-btn" onclick="handleRegister()">Создать аккаунт</button>
+                    <p class="hint">Уже есть аккаунт? <a href="#" onclick="switchTab('login'); return false;">Войди</a>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        function switchTab(tab) {
+            document.getElementById("tab-login").classList.toggle("active", tab === "login");
+            document.getElementById("tab-register").classList.toggle("active", tab === "register");
+            document.getElementById("form-login").classList.toggle("hidden", tab !== "login");
+            document.getElementById("form-register").classList.toggle("hidden", tab !== "register");
+        }
+
+        async function getSHA256Hash(str) {
+            const buf = new TextEncoder().encode(str);
+            const digest = await crypto.subtle.digest('SHA-256', buf);
+            return Array.from(new Uint8Array(digest))
+                .map(b => b.toString(16).padStart(2, '0'))
+                .join('');
+        }
+
+        async function handleLogin() {
+            const name = document.getElementById("login-name").value.trim();
+            const password = document.getElementById("login-password").value;
+            if (!name || !password) return;
+
+            // захэшировать login + password злоебучим хэшем
+            // отправить через POST /login с хедером oleg-password-hash
+            // ok == true? -> redirect на /, иначе alert "Вставай, ты обосрался"
+
+            const hash = await getSHA256Hash(name + password);
+            const res = await fetch(`/login`, { 
+                method: "POST",
+                headers: { "Content-Type": "application/json", "oleg-login-hash": hash }, 
+            });
+            const data = await res.json();
+
+            if(data.ok){
+                localStorage.setItem("id", data.id);
+                localStorage.setItem("name", name);
+                location.href = "/";
+            } else {
+                alert(data.error || "Ошбка входа");
+            }
+        }
+
+        async function handleRegister() {
+            const name = document.getElementById("reg-name").value.trim();
+            const pass = document.getElementById("reg-password").value;
+            const pass2 = document.getElementById("reg-password2").value;
+            if (!name) return;
+            if (pass !== pass2) { alert("Пароли не совпадают"); return; }
+
+            const hash = await getSHA256Hash(name + pass);
+            const res = await fetch(`/register`, {
+                method: "POST",
+                headers: {"oleg-name": name, "oleg-login-hash": hash}
+            });
+            const data = await res.json();
+
+            if (data.ok) {
+                localStorage.setItem("id", data.id);
+                localStorage.setItem("name", name);
+                location.href = "/";
+            } else {
+                alert(data.error || "Ошибка регистрации");
+            }
+        }
+    </script>
+</body>
+
+</html>

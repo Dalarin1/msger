@@ -1,6 +1,17 @@
 version: "3.9"
 
 services:
+  chat:
+    build: ./chat
+    container_name: chat
+    ports:
+      - "80:80"
+    restart: unless-stopped
+    volumes:
+      - ./database:/msger/database
+      - ./chat/global_chat:/msger/global_chat
+      - ./chat/personal_chats:/msger/personal_chats
+
   voice:
     build: ./voice
     container_name: voice-chat
@@ -14,8 +25,8 @@ services:
     restart: unless-stopped
     network_mode: host
     volumes:
-      - ./cert.pem:/etc/coturn/cert.pem:ro
-      - ./key.pem:/etc/coturn/key.pem:ro
+      - ./voice/cert.pem:/etc/coturn/cert.pem:ro
+      - ./voice/key.pem:/etc/coturn/key.pem:ro
     command: >
       -n
       --log-file=stdout
