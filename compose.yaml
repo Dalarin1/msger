@@ -9,8 +9,6 @@ services:
     restart: unless-stopped
     volumes:
       - ./database:/msger/database
-      - ./chat/global_chat:/msger/global_chat
-      - ./chat/personal_chats:/msger/personal_chats
 
   voice:
     build: ./voice

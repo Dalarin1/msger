@@ -253,9 +253,22 @@
 
     <script src="sha256.js"></script>
     <script>
+        let accessToken = null;
+
+
         document.addEventListener('DOMContentLoaded', () => {
             if (location.hash === "#register") {switchTab("register");}
+            refreshToken();
         });
+
+        async function refreshToken() {
+            const res = await fetch("/auth/refresh", {method:"POST"});
+            const body = res.json();
+
+            if (body.access_token){
+                accessToken = body.accessToken;
+            }
+        }
 
         function switchTab(tab) {
             document.getElementById("tab-login").classList.toggle("active", tab === "login");
@@ -263,14 +276,6 @@
             document.getElementById("form-login").classList.toggle("hidden", tab !== "login");
             document.getElementById("form-register").classList.toggle("hidden", tab !== "register");
         }
-
-        // async function getSHA256Hash(str) {
-        //     const buf = new TextEncoder().encode(str);
-        //     const digest = await crypto.subtle.digest('SHA-256', buf);
-        //     return Array.from(new Uint8Array(digest))
-        //         .map(b => b.toString(16).padStart(2, '0'))
-        //         .join('');
-        // }
 
         async function handleLogin() {
             const name = document.getElementById("login-name").value.trim();
@@ -282,15 +287,16 @@
             // ok == true? -> redirect на /, иначе alert "Вставай, ты обосрался"
 
             const hash = await sha256(name + password);
-            const res = await fetch(`/login`, {
+            const res = await fetch(`/auth/login`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json", "oleg-login-hash": hash },
+                headers: { "Content-Type": "application/json", "oleg-password-hash": hash },
             });
             const data = await res.json();
 
             if (data.ok) {
                 localStorage.setItem("id", data.id);
                 localStorage.setItem("name", name);
+                accessToken = data.access_token
                 location.href = "/";
             } else {
                 alert(data.error || "Ошбка входа");
@@ -305,15 +311,16 @@
             if (pass !== pass2) { alert("Пароли не совпадают"); return; }
 
             const hash = await sha256(name + pass);
-            const res = await fetch(`/register`, {
+            const res = await fetch(`/auth/register`, {
                 method: "POST",
-                headers: { "oleg-name": name, "oleg-login-hash": hash }
+                headers: { "oleg-name": name, "oleg-password-hash": hash }
             });
             const data = await res.json();
 
             if (data.ok) {
                 localStorage.setItem("id", data.id);
                 localStorage.setItem("name", name);
+                accessToken = data.access_token;
                 location.href = "/";
             } else {
                 alert(data.error || "Ошибка регистрации");

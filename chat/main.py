@@ -7,7 +7,7 @@ import jwt
 import os
 
 from datetime import datetime, timedelta, timezone
-from fastapi import WebSocket, WebSocketDisconnect, Depends
+from fastapi import WebSocket, WebSocketDisconnect, Depends, Response, Cookie
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.exceptions import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -87,22 +87,22 @@ def create_token(user_id: str):
 
 def create_refresh_token(user_id: str):
     jti = str(uuid.uuid4())
-    expires_at = _now_utc() + REFRESH_TOKEN_TTL
+    iat = _now_utc()
+    expires_at = iat + REFRESH_TOKEN_TTL
     data = {
         "sub": user_id,
         "type": "refresh",
         "jti": jti,
-        "iat": _now_utc(),
+        "iat": iat,
         "exp": expires_at,
     }
     token = jwt.encode(data, SECRET_KEY, ALGORITHM)
 
     cursor.execute(
         "INSERT INTO refresh_tokens (jti, user_id, expires_at) VALUES (?, ?, ?)",
-        (token, user_id, expires_at),
+        (jti, user_id, expires_at.isoformat()),
     )
     conn.commit()
-
     return token
 
 
@@ -116,7 +116,7 @@ def decode_token(encoded_token: str) -> dict:
 
 
 def revoke_token(jti: str) -> None:
-    cursor.execute("UPDATA refresh_tokens SET revoked = 1 WHERE jti=?", (jti,))
+    cursor.execute("UPDATE refresh_tokens SET revoked = 1 WHERE jti=?", (jti,))
     conn.commit()
 
 
@@ -273,17 +273,17 @@ async def get_login_page():
 
 
 @app.post("/auth/register")
-async def register(request: fastapi.Request) -> dict:
+async def register(request: fastapi.Request, response: Response) -> dict:
     """
     Заголовки:
       oleg-password-hash  — sha256(login + password), уникальный ключ
       oleg-name        — отображаемое имя
     Возвращает access_token + refresh_token.
     """
-    password_hash = request.headers.get("oleg-login-hash")
+    password_hash = request.headers.get("oleg-password-hash")
     username = request.headers.get("oleg-name")
     if not password_hash:
-        raise HTTPException(status_code=400, detail="oleg-login-hash header missing")
+        raise HTTPException(status_code=400, detail="oleg-password-hash header missing")
 
     existing = cursor.execute(
         "SELECT id FROM members WHERE password_hash = ?", (password_hash,)
@@ -300,17 +300,27 @@ async def register(request: fastapi.Request) -> dict:
     )
     conn.commit()
 
+    response.set_cookie(
+        key="refresh-token",
+        value=create_refresh_token(user_id),
+        samesite="strict",
+        httponly=True,
+        secure=True,
+        max_age=60 * 60 * 24 * 30, # месяц в секундах
+    )
+
+
     return {
         "ok": True,
         "id": user_id,
         "access_token": create_token(user_id),
-        "refresh_token": create_refresh_token(user_id),
+        # "refresh_token": create_refresh_token(user_id),
         "token_type": "bearer",
     }
 
 
 @app.post("/auth/login")
-async def login(request: fastapi.Request) -> dict:
+async def login(request: fastapi.Request, response: Response) -> dict:
     """
     Заголовок:
       oleg-password-hash  — sha256(login + password)
@@ -327,32 +337,33 @@ async def login(request: fastapi.Request) -> dict:
         raise HTTPException(401, "Wrong login or password")
 
     user_id = row["id"]
+    response.set_cookie(
+        key="refresh-token",
+        value=create_refresh_token(user_id),
+        samesite="strict",
+        httponly=True,
+        secure=True,
+        max_age=60 * 60 * 24 * 30, # месяц в секундах
+    )
+
     return {
         "ok": True,
         "id": user_id,
         "access_token": create_token(user_id),
-        "refresh_token": create_refresh_token(user_id),
+        # "refresh_token": create_refresh_token(user_id), #уйдёт в куку
         "token_type": "bearer",
     }
 
 
 @app.post("/auth/refresh")
-async def refresh_tokens(request: fastapi.Request) -> dict:
+async def refresh_tokens(refresh_token: str | None = Cookie(alias="refresh-token", default=None)) -> dict:
     """
-    Body JSON: { "refresh_token": "..." }
     Возвращает новый access_token. Refresh-токен остаётся тем же.
     (Можно сделать rotation — менять и refresh тоже — раскомментив строки ниже.)
     """
-
-    body = await request.json()
-    token = body.get("refresh_token", "")
-    payload = decode_token(token)
-
-    if payload.get("type") != "refresh":
-        raise HTTPException(401, 'Wrong type, must be "refresh"')
-
+    jti = decode_token(refresh_token).get("jti")
     row = cursor.execute(
-        "SELECT expired_at FROM refresh_tokens WHERE jti = ?", (token,)
+        "SELECT expires_at, user_id, revoked FROM refresh_tokens WHERE jti = ?", (jti,)
     ).fetchone()
     if not row:
         raise HTTPException(status_code=401, detail="Token not found")
@@ -374,14 +385,11 @@ async def refresh_tokens(request: fastapi.Request) -> dict:
 
 @app.post("/auth/logout")
 async def logout(
-    request: fastapi.Request, current_user: dict = Depends(get_current_user)
+    refresh_token: str | None = Cookie(alias="refresh-token",default=None), current_user: dict = Depends(get_current_user)
 ) -> dict:
-    body = await request.json()
-    token = body.get("refresh_token", "")
     try:
-        payload = decode_token(token)
-        jti = str(payload.get("jti"))
-        revoke_token(jti)
+        payload = decode_token(refresh_token)
+        revoke_token(payload.get("jti"))
     except:
         pass
     return {"ok": True}

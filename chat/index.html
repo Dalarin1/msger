@@ -243,22 +243,70 @@ const statusEl   = document.getElementById("status");
 const input      = document.getElementById("textInput");
 const overlay    = document.getElementById("authOverlay");
 
-let myId = localStorage.getItem("id");
+// ── токены ────────────────────────────────────────────────────────────────
+// access-токен живёт только в памяти — не в localStorage
+let accessToken = null;
 
-/* ── modal ── */
+function isLoggedIn() {
+    // Считаем залогиненным, если есть access-токен в памяти.
+    // После перезагрузки страницы он сбрасывается и восстанавливается через /auth/refresh
+    // (refresh-токен браузер сам подставит из httpOnly-куки).
+    return accessToken !== null;
+}
+
+async function refreshAccessToken() {
+    const res = await fetch("/auth/refresh", {
+        method: "POST",
+        credentials: "include", // браузер подставит httpOnly refresh-куку
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    accessToken = data.access_token;
+    return true;
+}
+
+// Обёртка над fetch: автоматически подставляет Bearer и обновляет токен при 401
+async function apiFetch(url, options = {}) {
+    if (!accessToken) {
+        const ok = await refreshAccessToken();
+        if (!ok) return null; // не залогинен
+    }
+
+    const doRequest = () => fetch(url, {
+        ...options,
+        credentials: "include",
+        headers: {
+            ...options.headers,
+            "Authorization": `Bearer ${accessToken}`,
+        },
+    });
+
+    let res = await doRequest();
+
+    // access-токен протух — обновляем и повторяем один раз
+    if (res.status === 401) {
+        const ok = await refreshAccessToken();
+        if (!ok) return null;
+        res = await doRequest();
+    }
+
+    return res;
+}
+
+// ── auth modal ────────────────────────────────────────────────────────────
 function showAuthModal() { overlay.classList.add("visible"); }
 function hideAuthModal()  { overlay.classList.remove("visible"); }
 
 overlay.addEventListener("click", e => { if (e.target === overlay) hideAuthModal(); });
 document.addEventListener("keydown", e => { if (e.key === "Escape") hideAuthModal(); });
 
-// Возвращает true если авторизован, иначе показывает модалку и возвращает false
-function ensureRegistered() {
-    if (myId) return true;
+function ensureLoggedIn() {
+    if (isLoggedIn()) return true;
     showAuthModal();
     return false;
 }
 
+// ── рендер сообщений ──────────────────────────────────────────────────────
 function add(msg) {
     const div = document.createElement("div");
     div.className = "msg";
@@ -275,7 +323,10 @@ function escapeHtml(s) {
     return String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
 }
 
-const ws = new WebSocket(`ws://${location.host}/ws`);
+// ── WebSocket ─────────────────────────────────────────────────────────────
+const proto = location.protocol === "https:" ? "wss" : "ws";
+const ws = new WebSocket(`${proto}://${location.host}/ws`);
+
 ws.onopen  = () => { statusEl.textContent = "online"; };
 ws.onclose = () => { statusEl.textContent = "offline"; };
 ws.onerror = () => { statusEl.textContent = "error"; };
@@ -283,29 +334,39 @@ ws.onmessage = (e) => {
     const data = JSON.parse(e.data);
     if (data.type === "history") { messagesEl.innerHTML = ""; data.messages.forEach(add); }
     if (data.type === "message") add(data.message);
-    if (data.type === "register") ensureRegistered();
 };
 
+// ── отправка ──────────────────────────────────────────────────────────────
 async function send() {
     const text = input.value.trim();
     if (!text) return;
-    if (!ensureRegistered()) return;
-    const res  = await fetch(`/send_msg?text=${encodeURIComponent(text)}&id=${myId}`);
-    const data = await res.json();
-    if (data.type === "register") {
-        localStorage.removeItem("id");
-        myId = null;
-        ensureRegistered();
+    if (!ensureLoggedIn()) return;
+
+    const res = await apiFetch("/send_msg", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+    });
+
+    if (!res) {
+        // apiFetch вернул null — сессия истекла
+        accessToken = null;
+        ensureLoggedIn();
         return;
     }
-    input.value = "";
+
+    if (res.ok) input.value = "";
 }
 
 input.addEventListener("keydown", e => { if (e.key === "Enter") send(); });
 document.getElementById("sendBtn").addEventListener("click", send);
 
-// показать модалку при загрузке, если не залогинен
-ensureRegistered();
+// ── инициализация: тихо восстанавливаем сессию ────────────────────────────
+(async () => {
+    await refreshAccessToken();
+    // если не удалось — модалку не показываем, просто не можем писать
+    // пользователь увидит её когда попытается отправить сообщение
+})();
 </script>
 </body>
 </html>

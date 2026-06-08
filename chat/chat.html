@@ -289,41 +289,97 @@ main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 </div>
 
 <script>
-let myId = localStorage.getItem("id");
+// ── токены ────────────────────────────────────────────────────────────────
+// access-токен только в памяти, refresh-токен в httpOnly-куке (браузер сам)
+let accessToken = null;
+
+// Текущий user_id берём из payload токена, не из localStorage
+let myId = null;
+
+function parseJwtPayload(token) {
+    try {
+        return JSON.parse(atob(token.split(".")[1]));
+    } catch {
+        return null;
+    }
+}
+
+async function refreshAccessToken() {
+    const res = await fetch("/auth/refresh", {
+        method: "POST",
+        credentials: "include",
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    accessToken = data.access_token;
+    const payload = parseJwtPayload(accessToken);
+    myId = payload?.sub ?? null;
+    return true;
+}
+
+async function apiFetch(url, options = {}) {
+    if (!accessToken) {
+        const ok = await refreshAccessToken();
+        if (!ok) return null;
+    }
+
+    const doRequest = () => fetch(url, {
+        ...options,
+        credentials: "include",
+        headers: {
+            ...options.headers,
+            "Authorization": `Bearer ${accessToken}`,
+        },
+    });
+
+    let res = await doRequest();
+
+    if (res.status === 401) {
+        const ok = await refreshAccessToken();
+        if (!ok) return null;
+        res = await doRequest();
+    }
+
+    return res;
+}
+
+// ── auth modal ────────────────────────────────────────────────────────────
 let allChats = [];
 let currentChatId = null;
 let ws = null;
 
-/* ── auth modal ── */
 const authOverlay = document.getElementById("authOverlay");
 function showAuthModal() { authOverlay.classList.add("visible"); }
 function hideAuthModal()  { authOverlay.classList.remove("visible"); }
 authOverlay.addEventListener("click", e => { if (e.target === authOverlay) hideAuthModal(); });
-document.addEventListener("keydown", e => { if (e.key === "Escape" && authOverlay.classList.contains("visible")) hideAuthModal(); });
+document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && authOverlay.classList.contains("visible")) hideAuthModal();
+});
 
-function ensureRegistered() {
+function ensureLoggedIn() {
     if (myId) return true;
     showAuthModal();
     return false;
 }
 
+// ── инициализация ─────────────────────────────────────────────────────────
 (async () => {
-    if (!ensureRegistered()) return;
+    const ok = await refreshAccessToken();
+    if (!ok) { showAuthModal(); return; }
+
     await loadChats();
+
     const withId = new URLSearchParams(location.search).get("with");
     if (withId) await openChat(withId);
 })();
 
-// ── list ──────────────────────────────────────────
+// ── список чатов ──────────────────────────────────────────────────────────
 async function loadChats() {
-    try {
-        const res  = await fetch("/my/chats", { headers: { "X-User-Id": myId } });
-        const data = await res.json();
-        allChats = data.chats || [];
-        renderChats(allChats);
-    } catch {
-        document.getElementById("chatList").innerHTML = `<div class="empty-state">ошибка загрузки</div>`;
-    }
+    const res = await apiFetch("/my/chats");
+    if (!res) { document.getElementById("chatList").innerHTML = `<div class="empty-state">ошибка загрузки</div>`; return; }
+    const data = await res.json();
+    allChats = data.chats || [];
+    renderChats(allChats);
 }
 
 function renderChats(chats) {
@@ -356,21 +412,15 @@ function filterChats() {
     renderChats(allChats.filter(c => c.other_name.toLowerCase().includes(q)));
 }
 
-// ── open chat ─────────────────────────────────────
+// ── открыть чат ───────────────────────────────────────────────────────────
 async function openChat(targetId) {
     closeModal();
     document.getElementById("modalError").style.display = "none";
 
-    try {
-        const res = await fetch(`/chat/open?with_id=${encodeURIComponent(targetId)}`, {
-            headers: { "X-User-Id": myId }
-        });
-        if (!res.ok) { showModalError("Пользователь не найден"); return; }
-        currentChatId = (await res.json()).chat_id;
-    } catch {
-        showModalError("Ошибка соединения");
-        return;
-    }
+    const res = await apiFetch(`/chat/open?with_id=${encodeURIComponent(targetId)}`);
+    if (!res || !res.ok) { showModalError("Пользователь не найден"); return; }
+
+    currentChatId = (await res.json()).chat_id;
 
     const found = allChats.find(c => c.other_id === targetId);
     const name  = found ? found.other_name : targetId.slice(0, 8) + "…";
@@ -382,11 +432,13 @@ async function openChat(targetId) {
     document.getElementById("msgInput").focus();
 }
 
-// ── ws ────────────────────────────────────────────
+// ── WebSocket ─────────────────────────────────────────────────────────────
 function connectWs(chatId) {
     if (ws) ws.close();
+
     const proto = location.protocol === "https:" ? "wss" : "ws";
-    ws = new WebSocket(`${proto}://${location.host}/ws/chat/${chatId}`);
+    // access-токен передаём query-параметром — браузерный WS не поддерживает заголовки
+    ws = new WebSocket(`${proto}://${location.host}/ws/chat/${chatId}?token=${encodeURIComponent(accessToken)}`);
 
     const st = document.getElementById("wsStatus");
     ws.onopen  = () => { st.textContent = "online";  st.style.color = "#16a34a"; };
@@ -423,27 +475,36 @@ function addMessage(msg) {
     msgEl.scrollTop = msgEl.scrollHeight;
 }
 
+// ── отправка ──────────────────────────────────────────────────────────────
 async function sendMessage() {
-    if (!ensureRegistered()) return;
+    if (!ensureLoggedIn()) return;
     const input = document.getElementById("msgInput");
     const text  = input.value.trim();
     if (!text || !currentChatId) return;
     input.value = "";
-    await fetch(`/chat/${currentChatId}/`, {
+
+    const res = await apiFetch(`/chat/${currentChatId}/`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-User-Id": myId },
-        body: JSON.stringify({ text })
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
     });
+
+    if (!res) {
+        // сессия истекла
+        accessToken = null;
+        myId = null;
+        showAuthModal();
+    }
 }
 
-// ── nav ───────────────────────────────────────────
+// ── навигация ─────────────────────────────────────────────────────────────
 function showScreen(id) {
     document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
     document.getElementById(id).classList.add("active");
 }
 
 function goToList() {
-    if (ws) ws.close();
+    if (ws) { ws.close(); ws = null; }
     currentChatId = null;
     document.getElementById("topbarTitle").textContent = "Мои чаты";
     document.getElementById("backBtn").style.display = "none";
@@ -452,9 +513,9 @@ function goToList() {
     showScreen("listScreen");
 }
 
-// ── modal ─────────────────────────────────────────
+// ── модалка нового чата ───────────────────────────────────────────────────
 function openModal() {
-    if (!ensureRegistered()) return;
+    if (!ensureLoggedIn()) return;
     document.getElementById("targetIdInput").value = "";
     document.getElementById("modalError").style.display = "none";
     document.getElementById("modal").classList.add("open");
