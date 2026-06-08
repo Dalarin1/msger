@@ -388,7 +388,7 @@ async def refresh_tokens(refresh_token: str | None = Cookie(alias="refresh-token
 
 @app.post("/auth/logout")
 async def logout(
-    refresh_token: str | None = Cookie(alias="refresh-token",default=None), current_user: dict = Depends(get_current_user)
+    refresh_token: str | None = Cookie(alias="refresh-token", default=None), current_user: dict = Depends(get_current_user)
 ) -> dict:
     try:
         payload = decode_token(refresh_token)

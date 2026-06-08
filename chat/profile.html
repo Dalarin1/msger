@@ -1,135 +1,233 @@
 <!DOCTYPE html>
 <html lang="ru">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Профиль</title>
-<style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Профиль</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
 
-body {
-    font-family: system-ui, sans-serif;
-    background: #f6f7f9;
-    height: 100vh;
-    display: flex;
-}
+        body {
+            font-family: system-ui, sans-serif;
+            background: #f6f7f9;
+            height: 100vh;
+            display: flex;
+        }
 
-nav {
-    width: 200px;
-    background: white;
-    border-right: 1px solid #e5e7eb;
-    display: flex;
-    flex-direction: column;
-    padding: 20px 0;
-    flex-shrink: 0;
-}
-nav .logo { font-size: 16px; font-weight: 700; padding: 0 20px 20px; border-bottom: 1px solid #e5e7eb; margin-bottom: 8px; }
-nav a { display: block; padding: 10px 20px; text-decoration: none; color: #555; font-size: 14px; transition: background .12s, color .12s; }
-nav a:hover { background: #f3f4f6; color: #111; }
-nav a.active { background: #f3f4f6; color: #111; font-weight: 600; }
+        nav {
+            width: 200px;
+            background: white;
+            border-right: 1px solid #e5e7eb;
+            display: flex;
+            flex-direction: column;
+            padding: 20px 0;
+            flex-shrink: 0;
+        }
 
-main {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-}
+        nav .logo {
+            font-size: 16px;
+            font-weight: 700;
+            padding: 0 20px 20px;
+            border-bottom: 1px solid #e5e7eb;
+            margin-bottom: 8px;
+        }
 
-.topbar {
-    background: white;
-    border-bottom: 1px solid #e5e7eb;
-    padding: 14px 20px;
-    font-weight: 600;
-    font-size: 15px;
-}
+        nav a {
+            display: block;
+            padding: 10px 20px;
+            text-decoration: none;
+            color: #555;
+            font-size: 14px;
+            transition: background .12s, color .12s;
+        }
 
-.content {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 16px;
-    padding: 40px;
-}
+        nav a:hover {
+            background: #f3f4f6;
+            color: #111;
+        }
 
-.label {
-    font-size: 13px;
-    color: #999;
-    text-transform: uppercase;
-    letter-spacing: .05em;
-}
+        nav a.active {
+            background: #f3f4f6;
+            color: #111;
+            font-weight: 600;
+        }
 
-.user-id {
-    font-size: 28px;
-    font-weight: 700;
-    color: #111;
-    word-break: break-all;
-    text-align: center;
-    font-family: monospace;
-}
+        main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
 
-.user-name {
-    font-size: 18px;
-    color: #555;
-}
+        .topbar {
+            background: white;
+            border-bottom: 1px solid #e5e7eb;
+            padding: 14px 20px;
+            font-weight: 600;
+            font-size: 15px;
+        }
 
-.copy-btn {
-    background: black;
-    color: white;
-    border: none;
-    padding: 10px 24px;
-    border-radius: 20px;
-    cursor: pointer;
-    font-size: 14px;
-    font-family: system-ui, sans-serif;
-    margin-top: 8px;
-}
-.copy-btn:hover { opacity: .9; }
+        .content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            padding: 40px;
+        }
 
-.divider {
-    width: 40px;
-    height: 1px;
-    background: #e5e7eb;
-}
-</style>
+        .label {
+            font-size: 13px;
+            color: #999;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+        }
+
+        .user-id {
+            font-size: 28px;
+            font-weight: 700;
+            color: #111;
+            word-break: break-all;
+            text-align: center;
+            font-family: monospace;
+        }
+
+        .user-name {
+            font-size: 18px;
+            color: #555;
+        }
+
+        .copy-btn {
+            background: black;
+            color: white;
+            border: none;
+            padding: 10px 24px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            font-family: system-ui, sans-serif;
+            margin-top: 8px;
+        }
+
+        .copy-btn:hover {
+            opacity: .9;
+        }
+
+        .divider {
+            width: 40px;
+            height: 1px;
+            background: #e5e7eb;
+        }
+    </style>
 </head>
+
 <body>
 
-<nav>
-    <div class="logo">Oleg Chat</div>
-    <a href="/">Главная</a>
-    <a href="/chat">Мои чаты</a>
-    <a href="/profile" class="active">Профиль</a>
-</nav>
+    <nav>
+        <div class="logo">Oleg Chat</div>
+        <a href="/">Главная</a>
+        <a href="/chat">Мои чаты</a>
+        <a href="/profile" class="active">Профиль</a>
+    </nav>
 
-<main>
-    <div class="topbar">Профиль</div>
-    <div class="content">
-        <div class="label">Имя</div>
-        <div class="user-name" id="userName">—</div>
-        <div class="divider"></div>
-        <div class="label">Мой ID</div>
-        <div class="user-id" id="userId">—</div>
-        <button class="copy-btn" onclick="copyId()">Скопировать ID</button>
-        <button class="logout" onclick="logout()">Выйти</button>
-        <button class="logout-all" onclick="logoutAll()">Выйти на всех усройствах</button>
-    </div>
-</main>
+    <main>
+        <div class="topbar">Профиль</div>
+        <div class="content">
+            <div class="label">Имя</div>
+            <div class="user-name" id="userName">—</div>
+            <div class="divider"></div>
+            <div class="label">Мой ID</div>
+            <div class="user-id" id="userId">—</div>
+            <button class="copy-btn" onclick="copyId()">Скопировать ID</button>
+            <button class="logout" onclick="logout()">Выйти</button>
+            <button class="logout-all" onclick="logoutAll()">Выйти на всех усройствах</button>
+        </div>
+    </main>
 
-<script>
-const myId   = localStorage.getItem("id")   || "не зарегистрирован";
-const myName = localStorage.getItem("name") || "—";
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            refreshAccessToken();
+        });
 
-document.getElementById("userId").textContent   = myId;
-document.getElementById("userName").textContent = myName;
+        let accessToken = null;
+        let myId = null;
+        // let myName = localStorage.getItem("name") || "—";
+        let myName =null;
+        
+        document.getElementById("userId").textContent = myId;
+        document.getElementById("userName").textContent = myName;
 
-async function copyId() {
-    await navigator.clipboard.writeText(myId).catch(() => {});
-    const btn = document.querySelector(".copy-btn");
-    btn.textContent = "Скопировано!";
-    setTimeout(() => { btn.textContent = "Скопировать ID"; }, 1500);
-}
-</script>
+        async function copyId() {
+            await navigator.clipboard.writeText(myId).catch(() => { });
+            const btn = document.querySelector(".copy-btn");
+            btn.textContent = "Скопировано!";
+            setTimeout(() => { btn.textContent = "Скопировать ID"; }, 1500);
+        }
+
+        // Текущий user_id берём из payload токена, не из localStorage
+        function parseJwtPayload(token) {
+            try {
+                return JSON.parse(atob(token.split(".")[1]));
+            } catch {
+                return null;
+            }
+        }
+
+        async function refreshAccessToken() {
+            const res = await fetch("/auth/refresh", {
+                method: "POST",
+                credentials: "include",
+            });
+            if (!res.ok) return false;
+            const data = await res.json();
+            accessToken = data.access_token;
+            const payload = parseJwtPayload(accessToken);
+            myId = payload?.sub ?? null;
+            document.getElementById("userId").textContent = myId;
+            return true;
+        }
+
+        async function logout() {
+            const res = await fetch("/auth/logout", {
+                method: "POST",
+                credentials: "include",
+                headers: { Authorization: `Bearer ${accessToken}` }
+            })
+            const body = await res.json()
+
+            if (body.ok) {
+                myId = null;
+                accessToken = null;
+                myName = null;
+                document.getElementById("userId").textContent = myId;
+                document.getElementById("userName").textContent = myName;
+            }
+        }
+
+        async function logoutAll() {
+            const res = await fetch("/auth/logout_all", {
+                method: "POST",
+                credentials: "include",
+                headers: { Authorization: `Bearer ${accessToken}` }
+            })
+            const body = await res.json()
+
+            if (body.ok) {
+                myId = null;
+                accessToken = null;
+                myName = null;
+                localStorage.setItem("name", null)
+                document.getElementById("userId").textContent = myId;
+                document.getElementById("userName").textContent = myName;
+            }
+        }
+    </script>
 </body>
+
 </html>
