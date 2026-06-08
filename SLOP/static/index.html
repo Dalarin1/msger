@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WebRTC Chat</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.4/socket.io.min.js"></script>
+<style>
+  :root {
+    --bg: #0d0d0f;
+    --surface: #18181b;
+    --border: #2a2a30;
+    --accent: #6ee7b7;
+    --accent2: #38bdf8;
+    --text: #e4e4e7;
+    --muted: #71717a;
+    --danger: #f87171;
+    --radius: 12px;
+    --font: 'Courier New', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Header ── */
+  header {
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  header .logo {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 0.05em;
+  }
+  header .room-badge {
+    font-size: 0.75rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 4px 10px;
+    border-radius: 999px;
+    color: var(--muted);
+  }
+  header .room-badge span { color: var(--accent2); }
+
+  /* ── Layout ── */
+  main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 20px 24px;
+    gap: 20px;
+    max-width: 1200px;
+    width: 100%;
+    margin: 0 auto;
+  }
+
+  /* ── Lobby ── */
+  #lobby {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    gap: 24px;
+  }
+  .lobby-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 36px 40px;
+    width: 100%;
+    max-width: 420px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .lobby-card h2 {
+    font-size: 1.2rem;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+  label {
+    font-size: 0.72rem;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+    display: block;
+  }
+  input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 0.9rem;
+    padding: 10px 14px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  input:focus { border-color: var(--accent); }
+
+  .btn-row { display: flex; gap: 10px; }
+  button {
+    flex: 1;
+    padding: 11px;
+    border: none;
+    border-radius: 8px;
+    font-family: var(--font);
+    font-size: 0.85rem;
+    cursor: pointer;
+    font-weight: 600;
+    transition: opacity 0.15s, transform 0.1s;
+    letter-spacing: 0.04em;
+  }
+  button:active { transform: scale(0.97); }
+  .btn-primary { background: var(--accent); color: #0d0d0f; }
+  .btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+  .btn-danger { background: var(--danger); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .divider {
+    display: flex; align-items: center; gap: 10px;
+    color: var(--muted); font-size: 0.75rem;
+  }
+  .divider::before, .divider::after {
+    content: ''; flex: 1; height: 1px; background: var(--border);
+  }
+
+  /* ── Room ── */
+  #room { display: none; flex-direction: column; gap: 16px; }
+
+  /* ── Controls ── */
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .ctrl-btn {
+    flex: unset;
+    padding: 9px 16px;
+    font-size: 0.8rem;
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .ctrl-btn.active { background: var(--accent); color: #0d0d0f; border-color: var(--accent); }
+  .ctrl-btn.danger { background: var(--danger); color: #fff; border-color: var(--danger); }
+  .spacer { flex: 1; }
+  #status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 6px var(--accent);
+    display: inline-block;
+  }
+  #status-text { font-size: 0.78rem; color: var(--muted); }
+
+  /* ── Video Grid ── */
+  #video-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+  }
+  .video-tile {
+    position: relative;
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    aspect-ratio: 16/9;
+  }
+  .video-tile video {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .video-tile .tile-label {
+    position: absolute;
+    bottom: 8px; left: 10px;
+    font-size: 0.72rem;
+    background: rgba(0,0,0,0.6);
+    padding: 3px 8px;
+    border-radius: 999px;
+    color: var(--text);
+    backdrop-filter: blur(4px);
+  }
+  .video-tile .tile-muted {
+    position: absolute;
+    top: 8px; right: 10px;
+    font-size: 0.7rem;
+    background: rgba(248,113,113,0.2);
+    color: var(--danger);
+    padding: 3px 8px;
+    border-radius: 999px;
+  }
+
+  /* ── Log ── */
+  #log-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    font-size: 0.75rem;
+    color: var(--muted);
+    max-height: 120px;
+    overflow-y: auto;
+    line-height: 1.6;
+  }
+  #log-box .log-line { margin-bottom: 2px; }
+  #log-box .log-info  { color: var(--accent2); }
+  #log-box .log-ok    { color: var(--accent); }
+  #log-box .log-err   { color: var(--danger); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">◈ MESH CALL</div>
+  <div class="room-badge">room: <span id="header-room">—</span></div>
+  <div class="room-badge">you: <span id="header-name">—</span></div>
+</header>
+
+<main>
+
+  <!-- ── LOBBY ── -->
+  <div id="lobby">
+    <div class="lobby-card">
+      <h2>Войти в комнату</h2>
+
+      <div>
+        <label>Ваше имя</label>
+        <input id="input-name" placeholder="Иван" value="">
+      </div>
+
+      <div>
+        <label>ID комнаты</label>
+        <input id="input-room" placeholder="например: room-42">
+      </div>
+
+      <div class="btn-row">
+        <button class="btn-primary" onclick="joinRoom()">Войти</button>
+        <button class="btn-secondary" onclick="generateRoomId()">Создать ID</button>
+      </div>
+
+      <div class="divider">или поделитесь ссылкой</div>
+      <div id="share-link" style="font-size:0.75rem;color:var(--muted);word-break:break-all;text-align:center"></div>
+    </div>
+  </div>
+
+  <!-- ── ROOM ── -->
+  <div id="room">
+
+    <div class="controls">
+      <button id="btn-mic"    class="ctrl-btn active" onclick="toggleMic()">🎤 Микрофон</button>
+      <button id="btn-cam"    class="ctrl-btn active" onclick="toggleCam()">📷 Камера</button>
+      <button id="btn-screen" class="ctrl-btn"        onclick="toggleScreen()">🖥 Экран</button>
+      <div class="spacer"></div>
+      <span id="status-dot"></span>
+      <span id="status-text">0 участников</span>
+      <button class="ctrl-btn danger" onclick="leaveRoom()">✕ Выйти</button>
+    </div>
+
+    <div id="video-grid">
+      <!-- тайлы добавляются динамически -->
+    </div>
+
+    <div id="log-box"></div>
+
+  </div>
+
+</main>
+
+<script>
+// ════════════════════════════════════════════
+//  CONFIG
+// ════════════════════════════════════════════
+const ICE_SERVERS = [
+  { urls: "stun:stun.l.google.com:19302" },
+  { urls: "stun:stun1.l.google.com:19302" }
+];
+
+// ════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════
+let socket, roomId, myName, mySid;
+let localStream = null;          // камера + микрофон
+let screenStream = null;         // трансляция экрана
+let micEnabled = true;
+let camEnabled = true;
+let screenEnabled = false;
+
+// peerConnections[sid] = RTCPeerConnection
+const peerConnections = {};
+// remoteStreams[sid] = MediaStream
+const remoteStreams  = {};
+
+// ════════════════════════════════════════════
+//  LOGGING
+// ════════════════════════════════════════════
+function log(msg, type = "info") {
+  const box = document.getElementById("log-box");
+  const line = document.createElement("div");
+  line.className = `log-line log-${type}`;
+  line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  box.appendChild(line);
+  box.scrollTop = box.scrollHeight;
+}
+
+// ════════════════════════════════════════════
+//  LOBBY HELPERS
+// ════════════════════════════════════════════
+function generateRoomId() {
+  const id = "room-" + Math.random().toString(36).slice(2, 8);
+  document.getElementById("input-room").value = id;
+  updateShareLink(id);
+}
+
+function updateShareLink(id) {
+  const url = `${location.origin}?room=${id}`;
+  document.getElementById("share-link").textContent = url;
+}
+
+// Pre-fill from URL param
+window.addEventListener("DOMContentLoaded", () => {
+  const params = new URLSearchParams(location.search);
+  const r = params.get("room");
+  if (r) {
+    document.getElementById("input-room").value = r;
+    updateShareLink(r);
+  }
+});
+
+// ════════════════════════════════════════════
+//  JOIN ROOM
+// ════════════════════════════════════════════
+async function joinRoom() {
+  myName  = document.getElementById("input-name").value.trim() || "Гость";
+  roomId  = document.getElementById("input-room").value.trim();
+  if (!roomId) { alert("Введите ID комнаты"); return; }
+
+  // Get local media
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+  } catch (e) {
+    log("Нет доступа к камере/микрофону: " + e.message, "err");
+    localStream = new MediaStream(); // empty — audio-only or no media
+  }
+
+  // Show room UI
+  document.getElementById("lobby").style.display = "none";
+  document.getElementById("room").style.display  = "flex";
+  document.getElementById("header-room").textContent = roomId;
+  document.getElementById("header-name").textContent = myName;
+
+  addLocalVideo();
+  connectSocket();
+}
+
+// ════════════════════════════════════════════
+//  SOCKET.IO
+// ════════════════════════════════════════════
+function connectSocket() {
+  socket = io();  // подключение к текущему origin
+
+  socket.on("connect", () => {
+    log(`Подключён к серверу (${socket.id})`, "ok");
+    socket.emit("join_room", { room_id: roomId, name: myName });
+  });
+
+  // Нам отправили список уже существующих участников
+  socket.on("room_joined", ({ your_sid, existing_users }) => {
+    mySid = your_sid;
+    log(`Вошёл в комнату. Участников уже: ${existing_users.length}`, "ok");
+    updateStatus();
+
+    // Инициировать offer для каждого существующего
+    existing_users.forEach(({ sid, name }) => {
+      log(`Создаю соединение с ${name}`);
+      createPeerConnection(sid, name, /* initiator */ true);
+    });
+  });
+
+  // Новый участник зашёл после нас
+  socket.on("user_joined", ({ sid, name }) => {
+    log(`${name} зашёл в комнату`);
+    updateStatus();
+    // Не инициируем — ждём его offer
+    createPeerConnection(sid, name, false);
+  });
+
+  socket.on("user_left", ({ sid }) => {
+    log(`Участник отключился`);
+    closePeer(sid);
+    updateStatus();
+  });
+
+  // WebRTC Signaling
+  socket.on("webrtc_offer", async ({ from_sid, sdp }) => {
+    const pc = peerConnections[from_sid];
+    if (!pc) return;
+    await pc.setRemoteDescription(new RTCSessionDescription({ type: "offer", sdp }));
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    socket.emit("webrtc_answer", { target_sid: from_sid, sdp: answer.sdp });
+    log(`Ответил на offer от ${from_sid.slice(0, 6)}...`);
+  });
+
+  socket.on("webrtc_answer", async ({ from_sid, sdp }) => {
+    const pc = peerConnections[from_sid];
+    if (!pc) return;
+    await pc.setRemoteDescription(new RTCSessionDescription({ type: "answer", sdp }));
+    log(`Получен answer от ${from_sid.slice(0, 6)}...`);
+  });
+
+  socket.on("ice_candidate", async ({ from_sid, candidate }) => {
+    const pc = peerConnections[from_sid];
+    if (pc && candidate) {
+      try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); }
+      catch (e) { /* ignore stale candidates */ }
+    }
+  });
+
+  socket.on("error", ({ message }) => log("Ошибка: " + message, "err"));
+  socket.on("disconnect", () => log("Отключён от сервера", "err"));
+}
+
+// ════════════════════════════════════════════
+//  PEER CONNECTION
+// ════════════════════════════════════════════
+function createPeerConnection(remoteSid, remoteName, isInitiator) {
+  if (peerConnections[remoteSid]) return peerConnections[remoteSid];
+
+  const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+  peerConnections[remoteSid] = pc;
+
+  // Добавляем наши треки (камера / экран)
+  const streamToSend = screenEnabled && screenStream ? screenStream : localStream;
+  streamToSend.getTracks().forEach(track => pc.addTrack(track, streamToSend));
+
+  // ICE candidates
+  pc.onicecandidate = ({ candidate }) => {
+    if (candidate) {
+      socket.emit("ice_candidate", { target_sid: remoteSid, candidate });
+    }
+  };
+
+  // Получаем удалённый поток
+  pc.ontrack = ({ streams }) => {
+    if (!remoteStreams[remoteSid]) {
+      remoteStreams[remoteSid] = streams[0];
+      addRemoteVideo(remoteSid, remoteName, streams[0]);
+    }
+  };
+
+  pc.oniceconnectionstatechange = () => {
+    log(`ICE [${remoteName}]: ${pc.iceConnectionState}`);
+    if (pc.iceConnectionState === "disconnected" || pc.iceConnectionState === "failed") {
+      closePeer(remoteSid);
+    }
+  };
+
+  // Если мы инициаторы — создаём offer
+  if (isInitiator) {
+    pc.onnegotiationneeded = async () => {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      socket.emit("webrtc_offer", { target_sid: remoteSid, sdp: offer.sdp });
+      log(`Отправил offer → ${remoteName}`);
+    };
+  }
+
+  return pc;
+}
+
+function closePeer(sid) {
+  if (peerConnections[sid]) {
+    peerConnections[sid].close();
+    delete peerConnections[sid];
+  }
+  delete remoteStreams[sid];
+  const tile = document.getElementById(`tile-${sid}`);
+  if (tile) tile.remove();
+}
+
+// ════════════════════════════════════════════
+//  VIDEO TILES
+// ════════════════════════════════════════════
+function addLocalVideo() {
+  const grid = document.getElementById("video-grid");
+  const tile = document.createElement("div");
+  tile.className = "video-tile";
+  tile.id = "tile-local";
+  tile.innerHTML = `
+    <video id="local-video" autoplay muted playsinline></video>
+    <div class="tile-label">Вы (${myName})</div>
+  `;
+  grid.appendChild(tile);
+  document.getElementById("local-video").srcObject = localStream;
+}
+
+function addRemoteVideo(sid, name, stream) {
+  const grid = document.getElementById("video-grid");
+  const tile = document.createElement("div");
+  tile.className = "video-tile";
+  tile.id = `tile-${sid}`;
+  tile.innerHTML = `
+    <video autoplay playsinline></video>
+    <div class="tile-label">${name}</div>
+  `;
+  grid.appendChild(tile);
+  tile.querySelector("video").srcObject = stream;
+  updateStatus();
+}
+
+// ════════════════════════════════════════════
+//  MEDIA CONTROLS
+// ════════════════════════════════════════════
+function toggleMic() {
+  micEnabled = !micEnabled;
+  localStream.getAudioTracks().forEach(t => t.enabled = micEnabled);
+  const btn = document.getElementById("btn-mic");
+  btn.textContent = micEnabled ? "🎤 Микрофон" : "🔇 Микрофон";
+  btn.classList.toggle("active", micEnabled);
+}
+
+function toggleCam() {
+  camEnabled = !camEnabled;
+  localStream.getVideoTracks().forEach(t => t.enabled = camEnabled);
+  const btn = document.getElementById("btn-cam");
+  btn.textContent = camEnabled ? "📷 Камера" : "📷 Камера (выкл)";
+  btn.classList.toggle("active", camEnabled);
+  const localVid = document.getElementById("local-video");
+  if (localVid) localVid.style.opacity = camEnabled ? "1" : "0.3";
+}
+
+async function toggleScreen() {
+  if (!screenEnabled) {
+    try {
+      screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      screenEnabled = true;
+
+      // Заменить видеотрек у всех пиров
+      const screenTrack = screenStream.getVideoTracks()[0];
+      Object.values(peerConnections).forEach(pc => {
+        const sender = pc.getSenders().find(s => s.track?.kind === "video");
+        if (sender) sender.replaceTrack(screenTrack);
+      });
+
+      // Показать экран себе
+      document.getElementById("local-video").srcObject = screenStream;
+
+      // Когда пользователь сам остановит — вернуть камеру
+      screenTrack.onended = () => { if (screenEnabled) toggleScreen(); };
+
+      document.getElementById("btn-screen").classList.add("active");
+      log("Трансляция экрана запущена", "ok");
+    } catch (e) {
+      log("Не удалось начать трансляцию экрана: " + e.message, "err");
+    }
+  } else {
+    // Остановить экран, вернуть камеру
+    screenStream?.getTracks().forEach(t => t.stop());
+    screenStream = null;
+    screenEnabled = false;
+
+    const camTrack = localStream.getVideoTracks()[0];
+    Object.values(peerConnections).forEach(pc => {
+      const sender = pc.getSenders().find(s => s.track?.kind === "video");
+      if (sender && camTrack) sender.replaceTrack(camTrack);
+    });
+
+    document.getElementById("local-video").srcObject = localStream;
+    document.getElementById("btn-screen").classList.remove("active");
+    log("Трансляция экрана остановлена");
+  }
+}
+
+function leaveRoom() {
+  socket?.disconnect();
+  Object.keys(peerConnections).forEach(closePeer);
+  localStream?.getTracks().forEach(t => t.stop());
+  screenStream?.getTracks().forEach(t => t.stop());
+  location.href = "/";
+}
+
+function updateStatus() {
+  const count = Object.keys(peerConnections).length;
+  document.getElementById("status-text").textContent =
+    `${count + 1} участник${count === 0 ? "" : count < 4 ? "а" : "ов"}`;
+}
+</script>
+</body>
+</html>
