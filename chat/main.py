@@ -303,9 +303,9 @@ async def register(request: fastapi.Request, response: Response) -> dict:
     response.set_cookie(
         key="refresh-token",
         value=create_refresh_token(user_id),
-        samesite="strict",
+        samesite="lax",
         httponly=True,
-        secure=True,
+        # secure=True,
         max_age=60 * 60 * 24 * 30, # месяц в секундах
     )
 
