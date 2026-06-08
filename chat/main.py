@@ -361,10 +361,13 @@ async def refresh_tokens(refresh_token: str | None = Cookie(alias="refresh-token
     Возвращает новый access_token. Refresh-токен остаётся тем же.
     (Можно сделать rotation — менять и refresh тоже — раскомментив строки ниже.)
     """
+    
     jti = decode_token(refresh_token).get("jti")
+    print(f"token={jti}")
     row = cursor.execute(
         "SELECT expires_at, user_id, revoked FROM refresh_tokens WHERE jti = ?", (jti,)
     ).fetchone()
+    print(f"Got from database: {row}")
     if not row:
         raise HTTPException(status_code=401, detail="Token not found")
     if row["revoked"]:
