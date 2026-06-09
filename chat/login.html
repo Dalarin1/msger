@@ -263,7 +263,7 @@
 
         async function refreshToken() {
             const res = await fetch("/auth/refresh", {method:"POST"});
-            const body = res.json();
+            const body = await res.json();
 
             if (body.access_token){
                 accessToken = body.accessToken;
