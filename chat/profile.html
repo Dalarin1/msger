@@ -189,7 +189,9 @@
             accessToken = data.access_token;
             const payload = parseJwtPayload(accessToken);
             myId = payload?.sub ?? null;
+            myName = payload?.nam ?? null;
             document.getElementById("userId").textContent = myId;
+            document.getElementById("userName").textContent = myName;
             return true;
         }
 
