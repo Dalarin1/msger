@@ -72,12 +72,13 @@ def _now_utc() -> datetime:
     return datetime.now(tz=timezone.utc)
 
 
-def create_token(user_id: str):
+def create_token(user_id: str, user_name: str | None = "anon"):
     now = _now_utc()
     data = {
         "iss": "oleg-chat-jwt-vendor",  # издатель токена (issuer)
         "type": "access",
         "sub": user_id,  # чей токен (subject)
+        "nam": user_name,
         "iat": now,  # дата издания токена (issued at)
         "exp": now
         + ACCESS_TOKEN_TTL,  # дата истечения валидности токена (Expiration time)
@@ -313,7 +314,7 @@ async def register(request: fastapi.Request, response: Response) -> dict:
     return {
         "ok": True,
         "id": user_id,
-        "access_token": create_token(user_id),
+        "access_token": create_token(user_id, username),
         # "refresh_token": create_refresh_token(user_id),
         "token_type": "bearer",
     }
@@ -331,12 +332,14 @@ async def login(request: fastapi.Request, response: Response) -> dict:
         raise HTTPException(400, "oleg-password-hash missing")
 
     row = cursor.execute(
-        "SELECT id FROM members WHERE password_hash = ?", (password_hash,)
+        "SELECT id, name FROM members WHERE password_hash = ?", (password_hash,)
     ).fetchone()
     if not row:
         raise HTTPException(401, "Wrong login or password")
 
     user_id = row["id"]
+    user_name = row["name"]
+
     response.set_cookie(
         key="refresh-token",
         value=create_refresh_token(user_id),
@@ -349,7 +352,7 @@ async def login(request: fastapi.Request, response: Response) -> dict:
     return {
         "ok": True,
         "id": user_id,
-        "access_token": create_token(user_id),
+        "access_token": create_token(user_id, user_name),
         # "refresh_token": create_refresh_token(user_id), #уйдёт в куку
         "token_type": "bearer",
     }
@@ -374,15 +377,17 @@ async def refresh_tokens(refresh_token: str | None = Cookie(alias="refresh-token
         raise HTTPException(status_code=401, detail="Token revoked")
 
     user_id = row["user_id"]
-
+    user_name = cursor.execute("" \
+    "SELECT name FROM members WHERE user_id = ?", (user_id, )).fetchone()['name']
     # --- Rotation (опционально) ---
     # conn.execute("UPDATE refresh_tokens SET revoked=1 WHERE jti=?", (jti,))
     # new_refresh = create_refresh_token(user_id)
 
     return {
-        "access_token": create_token(user_id),
+        "access_token": create_token(user_id, user_name),
         # "refresh_token": new_refresh,  # при rotation
         "token_type": "bearer",
+        "name": user_name
     }
 
 
