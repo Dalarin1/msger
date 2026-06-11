@@ -1,3 +1,4 @@
+import mimetypes
 import fastapi
 import uvicorn
 import hashlib
@@ -6,11 +7,12 @@ import uuid
 import jwt
 import os
 
+from typing import Literal
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from datetime import datetime, timedelta, timezone
-from fastapi import WebSocket, WebSocketDisconnect, Depends, Response, Cookie
+from fastapi import WebSocket, WebSocketDisconnect, Depends, Response, Cookie, UploadFile, File
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.exceptions import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -27,6 +29,39 @@ DATABASE_FOLDER = os.path.join(BASE_DIR, "database")
 DB_PATH = os.path.join(DATABASE_FOLDER, "app.db")
 MAKE_TABLES_SCRIPT_PATH = os.path.join(BASE_DIR, "make_tables.sqlite3")
 STATIC_FILES_FLD = os.path.join(BASE_DIR, "static")
+
+FILES_FLD = os.path.join(BASE_DIR, "files")
+USER_IMAGES_FLD = os.path.join(FILES_FLD, "images")
+USER_AUDIO_FLD = os.path.join(FILES_FLD, "audios")
+USER_VIDEO_FLD = os.path.join(FILES_FLD, "videos")
+USER_FILES_FLD = os.path.join(FILES_FLD, "others")
+
+MAX_IMAGE_SIZE  = 10 * 1024 * 1024   # 10 МБ
+MAX_AUDIO_SIZE  = 30 * 1024 * 1024   # 30 МБ
+MAX_VIDEO_SIZE  = 100 * 1024 * 1024  # 100 МБ
+MAX_FILE_SIZE   = 500 * 1024 * 1024   # 500 МБ
+
+
+ALLOWED_EXTENSIONS = {
+    "image": {".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"},
+    "video": {".mp4", ".webm"},
+    "audio": {".mp3", ".wav", ".ogg"},
+}
+
+MAX_SIZES = {
+    "image": MAX_IMAGE_SIZE,
+    "video": MAX_VIDEO_SIZE,
+    "audio": MAX_AUDIO_SIZE,
+    "file":  MAX_FILE_SIZE,
+}
+
+FOLDERS = {
+    "image": USER_IMAGES_FLD,
+    "video": USER_VIDEO_FLD,
+    "audio": USER_AUDIO_FLD,
+    "file":  USER_FILES_FLD,
+}
+
 
 limiter = Limiter(key_func=get_remote_address)
 app = fastapi.FastAPI()
@@ -52,6 +87,10 @@ def make_environ() -> None:
         os.system("")
 
     os.makedirs(DATABASE_FOLDER, exist_ok=True)
+    os.makedirs(USER_IMAGES_FLD, exist_ok=True)
+    os.makedirs(USER_AUDIO_FLD, exist_ok=True)
+    os.makedirs(USER_VIDEO_FLD, exist_ok=True)
+    os.makedirs(USER_FILES_FLD, exist_ok=True)
 
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
@@ -654,7 +693,82 @@ async def p2p_ws(chat_id: str, ws: WebSocket):
             p2p_clients[chat_id].remove(ws)
 
 
-if __name__ == "__main__":
+async def __default_get_content(entry_id: str | None, folder: str, ttype: Literal["Image","Audio","Video","File"]) -> FileResponse:
+    if entry_id is None:
+        raise HTTPException(404, f"{ttype} not found")
+    
+    path_to = os.path.join(folder, entry_id)
+    if not os.path.isfile(path_to):
+        raise HTTPException(404, f"{ttype} not found")
+    if not os.path.realpath(path_to).startswith(folder):
+        raise HTTPException(404, f"{ttype} not found")
+    
+    mime, _ = mimetypes.guess_type(entry_id)
+    media_type = mime or "application/octet-stream"
 
+    return FileResponse(path_to, media_type=media_type)
+
+@app.get("/img/{img_id}", response_class=FileResponse)
+@limiter.limit("10/minute")
+async def get_image(request: fastapi.Request, img_id: str | None = None):
+    return await __default_get_content(img_id, USER_IMAGES_FLD, "Image")
+
+@app.get("/audio/{audio_id}", response_class=FileResponse)
+@limiter.limit("10/minute")
+async def get_audio(request: fastapi.Request, audio_id: str | None = None):
+    return await __default_get_content(audio_id, USER_AUDIO_FLD, "Audio")
+
+@app.get("/video/{video_id}", response_class=FileResponse)
+@limiter.limit("10/minute")
+async def get_video(request: fastapi.Request, video_id: str | None = None):
+    return await __default_get_content(video_id, USER_VIDEO_FLD, "Video")
+
+@app.get("/file/{file_id}")
+@limiter.limit("10/minute")
+async def get_file(request: fastapi.Request, file_id: str | None = None):
+    return await __default_get_content(file_id, USER_FILES_FLD, "File")
+
+
+def _get_category(ext: str) -> str:
+    for category, exts in ALLOWED_EXTENSIONS.items():
+        if ext in exts:
+            return category
+    return "file"
+
+
+@app.post("/upload")
+@limiter.limit("20/minute")
+async def upload_file(
+    request: fastapi.Request,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+):
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if not ext:
+        raise HTTPException(400, "Cannot determine file extension")
+
+    mime, _ = mimetypes.guess_type(file.filename or "")
+    if not mime:
+        raise HTTPException(415, "Unknown file type")
+
+    category = _get_category(ext)
+    max_size = MAX_SIZES[category]
+
+    data = await file.read(max_size + 1)
+    if len(data) > max_size:
+        raise HTTPException(413, f"File too large (max {max_size // 1024 // 1024} MB)")
+
+    file_id = str(uuid.uuid4()) + ext
+    folder = FOLDERS[category]
+
+    path = os.path.realpath(os.path.join(folder, file_id))
+
+    with open(path, "wb") as f:
+        f.write(data)
+
+    return {"ok": True, "file_id": file_id, "category": category, "mime": mime}
+
+
+if __name__ == "__main__":
     make_environ()
     uvicorn.run(app, host="0.0.0.0", port=80)
