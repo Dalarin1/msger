@@ -14,7 +14,6 @@ body {
     display: flex;
 }
 
-/* ── sidebar ── */
 nav {
     width: 200px;
     background: white;
@@ -24,34 +23,12 @@ nav {
     padding: 20px 0;
     flex-shrink: 0;
 }
-
-nav .logo {
-    font-size: 16px;
-    font-weight: 700;
-    padding: 0 20px 20px;
-    border-bottom: 1px solid #e5e7eb;
-    margin-bottom: 8px;
-}
-
-nav a {
-    display: block;
-    padding: 10px 20px;
-    text-decoration: none;
-    color: #555;
-    font-size: 14px;
-    border-radius: 0;
-    transition: background .12s, color .12s;
-}
+nav .logo { font-size: 16px; font-weight: 700; padding: 0 20px 20px; border-bottom: 1px solid #e5e7eb; margin-bottom: 8px; }
+nav a { display: block; padding: 10px 20px; text-decoration: none; color: #555; font-size: 14px; transition: background .12s, color .12s; }
 nav a:hover { background: #f3f4f6; color: #111; }
 nav a.active { background: #f3f4f6; color: #111; font-weight: 600; }
 
-/* ── main ── */
-main {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-}
+main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 
 .topbar {
     background: white;
@@ -63,7 +40,6 @@ main {
     align-items: center;
     gap: 10px;
 }
-
 .topbar span { font-size: 12px; color: #999; font-weight: 400; }
 
 #messages {
@@ -79,41 +55,84 @@ main {
     background: white;
     border: 1px solid #e5e7eb;
     border-radius: 14px;
-    padding: 10px 14px;
+    padding: 8px 14px;
     max-width: 700px;
 }
 
-.meta {
-    font-size: 12px;
-    color: #999;
-    margin-bottom: 4px;
-}
-
-.meta .sender {
-    color: #111;
-    font-weight: 600;
-    cursor: pointer;
-}
+.meta { font-size: 12px; color: #999; margin-bottom: 3px; }
+.meta .sender { color: #111; font-weight: 600; cursor: pointer; }
 .meta .sender:hover { text-decoration: underline; }
 
-.text {
-    font-size: 14px;
-    white-space: pre-wrap;
-    word-break: break-word;
-    color: #111;
+.text { font-size: 14px; white-space: pre-wrap; word-break: break-word; color: #111; }
+
+/* вложения в глобальном чате */
+.attachments { margin-top: 5px; display: flex; flex-direction: column; gap: 3px; }
+.attachment-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    color: #4f46e5;
+    text-decoration: none;
+    padding: 2px 0;
+}
+.attachment-link:hover { text-decoration: underline; opacity: .8; }
+.attachment-link .icon { font-size: 14px; }
+
+/* прикреплённые файлы (pending) */
+#pendingFiles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 20px 0;
+    background: white;
+}
+.pending-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    border-radius: 20px;
+    padding: 4px 10px 4px 8px;
+    font-size: 12px;
+    color: #333;
+}
+.pending-chip .remove {
+    cursor: pointer; color: #999; font-size: 14px;
+    line-height: 1; background: none; border: none; padding: 0;
+}
+.pending-chip .remove:hover { color: #111; }
+
+#uploadStatus {
+    font-size: 12px;
+    color: #888;
+    padding: 2px 20px 6px;
+    background: white;
+    display: none;
 }
 
 #inputBar {
     display: flex;
-    gap: 10px;
-    padding: 12px 20px;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
     border-top: 1px solid #e5e7eb;
     background: white;
 }
 
+#attachBtn {
+    background: none; border: none; cursor: pointer;
+    font-size: 20px; line-height: 1; color: #888;
+    padding: 4px; border-radius: 8px;
+    transition: color .12s, background .12s; flex-shrink: 0;
+}
+#attachBtn:hover { color: #111; background: #f3f4f6; }
+#fileInput { display: none; }
+
 #textInput {
     flex: 1;
-    padding: 10px 14px;
+    padding: 9px 14px;
     border-radius: 20px;
     border: 1px solid #ddd;
     outline: none;
@@ -123,83 +142,39 @@ main {
 #textInput:focus { border-color: #111; }
 
 #sendBtn {
-    background: black;
-    color: white;
-    border: none;
-    padding: 0 20px;
-    border-radius: 20px;
-    cursor: pointer;
-    font-size: 14px;
-    font-family: system-ui, sans-serif;
+    background: black; color: white; border: none;
+    padding: 0 20px; height: 38px; border-radius: 20px; cursor: pointer;
+    font-size: 14px; font-family: system-ui, sans-serif; flex-shrink: 0;
 }
 #sendBtn:hover { opacity: .9; }
 
-/* ── auth modal ── */
+/* auth modal */
 #authOverlay {
-    display: none;
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,.35);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
-    z-index: 100;
-    align-items: center;
-    justify-content: center;
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,.35); backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px); z-index: 100;
+    align-items: center; justify-content: center;
 }
 #authOverlay.visible { display: flex; }
-
 #authCard {
-    background: white;
-    border: 1px solid #e5e7eb;
-    border-radius: 16px;
-    padding: 28px 32px;
-    width: 320px;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    position: relative;
+    background: white; border: 1px solid #e5e7eb;
+    border-radius: 16px; padding: 28px 32px;
+    width: 320px; display: flex; flex-direction: column; gap: 16px; position: relative;
 }
-
 #authCard .close-btn {
-    position: absolute;
-    top: 14px; right: 16px;
-    background: none;
-    border: none;
-    font-size: 18px;
-    color: #999;
-    cursor: pointer;
-    line-height: 1;
-    padding: 2px 6px;
-    border-radius: 6px;
+    position: absolute; top: 14px; right: 16px;
+    background: none; border: none; font-size: 18px;
+    color: #999; cursor: pointer; line-height: 1; padding: 2px 6px; border-radius: 6px;
 }
 #authCard .close-btn:hover { background: #f3f4f6; color: #111; }
-
-#authCard h2 {
-    font-size: 16px;
-    font-weight: 700;
-    color: #111;
-    margin-right: 24px;
-}
-
-#authCard p {
-    font-size: 14px;
-    color: #555;
-    line-height: 1.5;
-}
-
+#authCard h2 { font-size: 16px; font-weight: 700; color: #111; margin-right: 24px; }
+#authCard p  { font-size: 14px; color: #555; line-height: 1.5; }
 .auth-btn {
-    display: block;
-    text-align: center;
-    padding: 10px;
-    border-radius: 20px;
-    font-size: 14px;
-    font-family: system-ui, sans-serif;
-    font-weight: 600;
-    cursor: pointer;
-    text-decoration: none;
-    transition: opacity .12s;
+    display: block; text-align: center; padding: 10px; border-radius: 20px;
+    font-size: 14px; font-family: system-ui, sans-serif; font-weight: 600;
+    cursor: pointer; text-decoration: none; transition: opacity .12s;
 }
-.auth-btn.primary { background: black; color: white; border: none; }
+.auth-btn.primary   { background: black; color: white; border: none; }
 .auth-btn.secondary { background: white; color: #111; border: 1px solid #e5e7eb; }
 .auth-btn:hover { opacity: .82; }
 </style>
@@ -220,8 +195,12 @@ main {
     </div>
 
     <div id="messages"></div>
+    <div id="pendingFiles"></div>
+    <div id="uploadStatus"></div>
 
     <div id="inputBar">
+        <button id="attachBtn" onclick="document.getElementById('fileInput').click()" title="Прикрепить файл">📎</button>
+        <input type="file" id="fileInput" multiple onchange="handleFileSelect(event)">
         <input id="textInput" placeholder="Сообщение...">
         <button id="sendBtn">Отправить</button>
     </div>
@@ -243,60 +222,39 @@ const statusEl   = document.getElementById("status");
 const input      = document.getElementById("textInput");
 const overlay    = document.getElementById("authOverlay");
 
-// ── токены ────────────────────────────────────────────────────────────────
-// access-токен живёт только в памяти — не в localStorage
 let accessToken = null;
+let pendingAttachments = []; // [{url, mime, original_name}]
 
-function isLoggedIn() {
-    // Считаем залогиненным, если есть access-токен в памяти.
-    // После перезагрузки страницы он сбрасывается и восстанавливается через /auth/refresh
-    // (refresh-токен браузер сам подставит из httpOnly-куки).
-    return accessToken !== null;
-}
+function isLoggedIn() { return accessToken !== null; }
 
 async function refreshAccessToken() {
-    const res = await fetch("/auth/refresh", {
-        method: "POST",
-        credentials: "include", // браузер подставит httpOnly refresh-куку
-    });
+    const res = await fetch("/auth/refresh", { method: "POST", credentials: "include" });
     if (!res.ok) return false;
     const data = await res.json();
     accessToken = data.access_token;
     return true;
 }
 
-// Обёртка над fetch: автоматически подставляет Bearer и обновляет токен при 401
 async function apiFetch(url, options = {}) {
     if (!accessToken) {
         const ok = await refreshAccessToken();
-        if (!ok) return null; // не залогинен
+        if (!ok) return null;
     }
-
-    const doRequest = () => fetch(url, {
-        ...options,
-        credentials: "include",
-        headers: {
-            ...options.headers,
-            "Authorization": `Bearer ${accessToken}`,
-        },
+    const doReq = () => fetch(url, {
+        ...options, credentials: "include",
+        headers: { ...options.headers, "Authorization": `Bearer ${accessToken}` },
     });
-
-    let res = await doRequest();
-
-    // access-токен протух — обновляем и повторяем один раз
+    let res = await doReq();
     if (res.status === 401) {
         const ok = await refreshAccessToken();
         if (!ok) return null;
-        res = await doRequest();
+        res = await doReq();
     }
-
     return res;
 }
 
-// ── auth modal ────────────────────────────────────────────────────────────
 function showAuthModal() { overlay.classList.add("visible"); }
 function hideAuthModal()  { overlay.classList.remove("visible"); }
-
 overlay.addEventListener("click", e => { if (e.target === overlay) hideAuthModal(); });
 document.addEventListener("keydown", e => { if (e.key === "Escape") hideAuthModal(); });
 
@@ -306,7 +264,25 @@ function ensureLoggedIn() {
     return false;
 }
 
-// ── рендер сообщений ──────────────────────────────────────────────────────
+function attachmentIcon(mime) {
+    if (!mime) return "📄";
+    if (mime.startsWith("image/")) return "🖼";
+    if (mime.startsWith("audio/")) return "🎵";
+    if (mime.startsWith("video/")) return "🎬";
+    return "📄";
+}
+
+function renderAttachments(attachments) {
+    if (!attachments || !attachments.length) return "";
+    return `<div class="attachments">${attachments.map(a => {
+        const icon = attachmentIcon(a.mime);
+        const label = escapeHtml(a.original_name || a.url);
+        return `<a class="attachment-link" href="${escapeHtml(a.url)}" target="_blank" rel="noopener">
+            <span class="icon">${icon}</span>${label}
+        </a>`;
+    }).join("")}</div>`;
+}
+
 function add(msg) {
     const div = document.createElement("div");
     div.className = "msg";
@@ -314,7 +290,8 @@ function add(msg) {
         <div class="meta">
             <span class="sender" onclick="location.href='/chat?with=${msg.sender_id}'">${escapeHtml(msg.sender)}</span>
         </div>
-        <div class="text">${escapeHtml(msg.text)}</div>`;
+        ${msg.text ? `<div class="text">${escapeHtml(msg.text)}</div>` : ""}
+        ${renderAttachments(msg.attachments)}`;
     messagesEl.appendChild(div);
     messagesEl.scrollTop = messagesEl.scrollHeight;
 }
@@ -323,10 +300,9 @@ function escapeHtml(s) {
     return String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
 }
 
-// ── WebSocket ─────────────────────────────────────────────────────────────
+// WebSocket
 const proto = location.protocol === "https:" ? "wss" : "ws";
 const ws = new WebSocket(`${proto}://${location.host}/ws`);
-
 ws.onopen  = () => { statusEl.textContent = "online"; };
 ws.onclose = () => { statusEl.textContent = "offline"; };
 ws.onerror = () => { statusEl.textContent = "error"; };
@@ -336,37 +312,79 @@ ws.onmessage = (e) => {
     if (data.type === "message") add(data.message);
 };
 
-// ── отправка ──────────────────────────────────────────────────────────────
+// Загрузка файла
+function handleFileSelect(event) {
+    const files = Array.from(event.target.files);
+    event.target.value = "";
+    files.forEach(uploadFile);
+}
+
+async function uploadFile(file) {
+    const statusEl = document.getElementById("uploadStatus");
+    statusEl.style.display = "block";
+    statusEl.textContent = `Загрузка ${file.name}…`;
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const res = await apiFetch("/upload", { method: "POST", body: formData });
+    if (!res || !res.ok) {
+        const err = res ? (await res.json().catch(() => ({}))).detail : "ошибка сети";
+        statusEl.textContent = `Ошибка: ${err || "не удалось загрузить"}`;
+        setTimeout(() => { statusEl.style.display = "none"; }, 3000);
+        return;
+    }
+
+    const data = await res.json();
+    pendingAttachments.push({ url: data.url, mime: data.mime, original_name: data.original_name });
+    renderPendingChips();
+    statusEl.style.display = "none";
+}
+
+function renderPendingChips() {
+    const el = document.getElementById("pendingFiles");
+    el.innerHTML = pendingAttachments.map((a, i) => {
+        const icon = attachmentIcon(a.mime);
+        return `<div class="pending-chip">
+            <span>${icon}</span>
+            <span>${escapeHtml(a.original_name || a.url)}</span>
+            <button class="remove" onclick="removePending(${i})">✕</button>
+        </div>`;
+    }).join("");
+}
+
+function removePending(idx) {
+    pendingAttachments.splice(idx, 1);
+    renderPendingChips();
+}
+
+// Отправка
 async function send() {
     const text = input.value.trim();
-    if (!text) return;
+    if (!text && pendingAttachments.length === 0) return;
     if (!ensureLoggedIn()) return;
+
+    input.value = "";
+    const attachments = [...pendingAttachments];
+    pendingAttachments = [];
+    renderPendingChips();
 
     const res = await apiFetch("/send_msg", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, attachments }),
     });
 
     if (!res) {
-        // apiFetch вернул null — сессия истекла
         accessToken = null;
         ensureLoggedIn();
-        return;
     }
-
-    if (res.ok) input.value = "";
 }
 
 input.addEventListener("keydown", e => { if (e.key === "Enter") send(); });
 document.getElementById("sendBtn").addEventListener("click", send);
 
-// ── инициализация: тихо восстанавливаем сессию ────────────────────────────
-(async () => {
-    await refreshAccessToken();
-    // если не удалось — модалку не показываем, просто не можем писать
-    // пользователь увидит её когда попытается отправить сообщение
-})();
+(async () => { await refreshAccessToken(); })();
 </script>
 </body>
 </html>

@@ -12,7 +12,15 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from datetime import datetime, timedelta, timezone
-from fastapi import WebSocket, WebSocketDisconnect, Depends, Response, Cookie, UploadFile, File
+from fastapi import (
+    WebSocket,
+    WebSocketDisconnect,
+    Depends,
+    Response,
+    Cookie,
+    UploadFile,
+    File,
+)
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.exceptions import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -36,11 +44,10 @@ USER_AUDIO_FLD = os.path.join(FILES_FLD, "audios")
 USER_VIDEO_FLD = os.path.join(FILES_FLD, "videos")
 USER_FILES_FLD = os.path.join(FILES_FLD, "others")
 
-MAX_IMAGE_SIZE  = 10 * 1024 * 1024   # 10 МБ
-MAX_AUDIO_SIZE  = 30 * 1024 * 1024   # 30 МБ
-MAX_VIDEO_SIZE  = 100 * 1024 * 1024  # 100 МБ
-MAX_FILE_SIZE   = 500 * 1024 * 1024   # 500 МБ
-
+MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10 МБ
+MAX_AUDIO_SIZE = 30 * 1024 * 1024  # 30 МБ
+MAX_VIDEO_SIZE = 100 * 1024 * 1024  # 100 МБ
+MAX_FILE_SIZE = 500 * 1024 * 1024  # 500 МБ
 
 ALLOWED_EXTENSIONS = {
     "image": {".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"},
@@ -52,16 +59,22 @@ MAX_SIZES = {
     "image": MAX_IMAGE_SIZE,
     "video": MAX_VIDEO_SIZE,
     "audio": MAX_AUDIO_SIZE,
-    "file":  MAX_FILE_SIZE,
+    "file": MAX_FILE_SIZE,
 }
 
 FOLDERS = {
     "image": USER_IMAGES_FLD,
     "video": USER_VIDEO_FLD,
     "audio": USER_AUDIO_FLD,
-    "file":  USER_FILES_FLD,
+    "file": USER_FILES_FLD,
 }
 
+URL_PREFIXES = {
+    "image": "/img",
+    "video": "/video",
+    "audio": "/audio",
+    "file": "/file",
+}
 
 limiter = Limiter(key_func=get_remote_address)
 app = fastapi.FastAPI()
@@ -77,8 +90,9 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
-conn: sqlite3.Connection 
-cursor: sqlite3.Cursor   
+conn: sqlite3.Connection
+cursor: sqlite3.Cursor
+
 
 def make_environ() -> None:
     global conn, cursor
@@ -94,14 +108,9 @@ def make_environ() -> None:
 
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
-
-    conn.execute(
-        "PRAGMA journal_mode=WAL"
-    )  # вроде позволяет делать многопоточных чтецов, но не уверен
-    conn.execute(
-        "PRAGMA synchronous=NORMAL"
-    )  # меньше синхронизаций по сравнению с EXTRA / FULL
-    conn.execute("PRAGMA foreign_keys=ON")  # включаем отношения между таблицами
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute("PRAGMA foreign_keys=ON")
 
     cursor = conn.cursor()
 
@@ -111,7 +120,7 @@ def make_environ() -> None:
     conn.commit()
 
 
-#  JWT
+# ── JWT ───────────────────────────────────────────────────────────────────
 
 
 def _now_utc() -> datetime:
@@ -121,13 +130,12 @@ def _now_utc() -> datetime:
 def create_token(user_id: str, user_name: str | None = "anon"):
     now = _now_utc()
     data = {
-        "iss": "oleg-chat-jwt-vendor",  # издатель токена (issuer)
+        "iss": "oleg-chat-jwt-vendor",
         "type": "access",
-        "sub": user_id,  # чей токен (subject)
+        "sub": user_id,
         "nam": user_name,
-        "iat": now,  # дата издания токена (issued at)
-        "exp": now
-        + ACCESS_TOKEN_TTL,  # дата истечения валидности токена (Expiration time)
+        "iat": now,
+        "exp": now + ACCESS_TOKEN_TTL,
     }
     return jwt.encode(data, SECRET_KEY, ALGORITHM)
 
@@ -144,7 +152,6 @@ def create_refresh_token(user_id: str):
         "exp": expires_at,
     }
     token = jwt.encode(data, SECRET_KEY, ALGORITHM)
-
     cursor.execute(
         "INSERT INTO refresh_tokens (jti, user_id, expires_at) VALUES (?, ?, ?)",
         (jti, user_id, expires_at.isoformat()),
@@ -178,48 +185,81 @@ def get_current_user(
     return payload
 
 
-#    HELPERS
+# ── HELPERS ───────────────────────────────────────────────────────────────
 
 
-def _row_to_msg(row: sqlite3.Row) -> dict:
+def _get_attachments(message_id: int, message_type: str) -> list[dict]:
+    rows = cursor.execute(
+        "SELECT url, mime, original_name FROM message_attachments "
+        "WHERE message_id = ? AND message_type = ?",
+        (message_id, message_type),
+    ).fetchall()
+    return [
+        {"url": r["url"], "mime": r["mime"], "original_name": r["original_name"]}
+        for r in rows
+    ]
+
+
+def _save_attachments(
+    message_id: int, message_type: str, attachments: list[dict]
+) -> None:
+    """attachments — список {"url": ..., "mime": ..., "original_name": ...}"""
+    for a in attachments:
+        cursor.execute(
+            "INSERT INTO message_attachments (message_id, message_type, url, mime, original_name) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (message_id, message_type, a["url"], a.get("mime"), a.get("original_name")),
+        )
+    conn.commit()
+
+
+def _row_to_msg(row: sqlite3.Row, message_type: str) -> dict:
+    msg_id = row["id"]
     return {
-        "id": row["id"],
+        "id": msg_id,
         "sender": row["sender"],
         "sender_id": row["sender_id"],
         "text": row["text"],
         "timestamp": row["timestamp"],
+        "attachments": _get_attachments(msg_id, message_type),
     }
 
 
 def get_global_history(limit: int = 100, before_id: int | None = None) -> list[dict]:
-    if before_id:  # подгружаем историю чата после N-ного соо.
+    if before_id:
         cursor.execute(
-            "SELECT id, sender, sender_id, text, timestamp  FROM global_messages WHERE id < ? ORDER BY id DESC LIMIT ?",
+            "SELECT id, sender, sender_id, text, timestamp FROM global_messages "
+            "WHERE id < ? ORDER BY id DESC LIMIT ?",
             (before_id, limit),
         )
-    else:  # грузим последние 100
+    else:
         cursor.execute(
-            "SELECT id, sender, sender_id, text, timestamp  FROM global_messages ORDER BY id DESC LIMIT ?",
+            "SELECT id, sender, sender_id, text, timestamp FROM global_messages "
+            "ORDER BY id DESC LIMIT ?",
             (limit,),
         )
+    return [_row_to_msg(i, "global") for i in reversed(cursor.fetchall())]
 
-    return [_row_to_msg(i) for i in reversed(cursor.fetchall())]
 
-
-def save_global_msg(sender_id: str, sender: str, text: str) -> dict:
+def save_global_msg(
+    sender_id: str, sender: str, text: str, attachments: list[dict] | None = None
+) -> dict:
     ts = _now_utc().isoformat()
     cur = conn.execute(
-        "INSERT INTO global_messages (sender_id, sender, text, timestamp) "
-        "VALUES (?, ?, ?, ?)",
+        "INSERT INTO global_messages (sender_id, sender, text, timestamp) VALUES (?, ?, ?, ?)",
         (sender_id, sender, text, ts),
     )
     conn.commit()
+    msg_id = cur.lastrowid
+    if attachments:
+        _save_attachments(msg_id, "global", attachments)
     return {
-        "id": cur.lastrowid,
+        "id": msg_id,
         "sender": sender,
         "sender_id": sender_id,
         "text": text,
         "timestamp": ts,
+        "attachments": attachments or [],
     }
 
 
@@ -238,31 +278,39 @@ def get_p2p_history(
             "WHERE chat_id = ? ORDER BY id DESC LIMIT ?",
             (chat_id, limit),
         )
-    return [_row_to_msg(i) for i in reversed(cursor.fetchall())]
+    return [_row_to_msg(i, "p2p") for i in reversed(cursor.fetchall())]
 
 
-def save_p2p_msg(chat_id: str, sender_id: str, sender: str, text: str) -> dict:
+def save_p2p_msg(
+    chat_id: str,
+    sender_id: str,
+    sender: str,
+    text: str,
+    attachments: list[dict] | None = None,
+) -> dict:
     ts = _now_utc().isoformat()
     cursor.execute(
-        "INSERT INTO p2p_messages (chat_id, sender_id, sender, text, timestamp) "
-        "VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO p2p_messages (chat_id, sender_id, sender, text, timestamp) VALUES (?, ?, ?, ?, ?)",
         (chat_id, sender_id, sender, text, ts),
     )
     conn.commit()
+    msg_id = cursor.lastrowid
+    if attachments:
+        _save_attachments(msg_id, "p2p", attachments)
     return {
-        "id": cursor.lastrowid,
+        "id": msg_id,
         "chat_id": chat_id,
         "sender": sender,
         "sender_id": sender_id,
         "text": text,
         "timestamp": ts,
+        "attachments": attachments or [],
     }
 
 
 def make_p2p_chat(id_1: str, id_2: str) -> str:
     key = "".join(sorted([id_1, id_2]))
     chat_id = hashlib.sha1(key.encode()).hexdigest()
-
     cursor.execute(
         "INSERT OR IGNORE INTO chats (chat_id, user_id, other_id) VALUES (?, ?, ?)",
         (chat_id, id_1, id_2),
@@ -272,18 +320,16 @@ def make_p2p_chat(id_1: str, id_2: str) -> str:
         (chat_id, id_2, id_1),
     )
     conn.commit()
-
     return chat_id
 
 
-# ---------------------------------------------------------------------------
-# WebSocket-клиенты
-# ---------------------------------------------------------------------------
+# ── WebSocket clients ─────────────────────────────────────────────────────
 
 global_clients: list[WebSocket] = []
 p2p_clients: dict[str, list[WebSocket]] = {}
 
-# STATIC
+
+# ── STATIC ────────────────────────────────────────────────────────────────
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -295,8 +341,9 @@ async def get_index(request: fastapi.Request):
 @app.get("/sha256.js")
 @limiter.limit("30/minute")
 async def get_sha256(request: fastapi.Request):
-    # return FileResponse("sha256.js", media_type="application/javascript")
-    return FileResponse(os.path.join(STATIC_FILES_FLD, "sha256.js"), media_type="application/javascript")
+    return FileResponse(
+        os.path.join(STATIC_FILES_FLD, "sha256.js"), media_type="application/javascript"
+    )
 
 
 @app.get("/chat", response_class=HTMLResponse)
@@ -318,36 +365,27 @@ async def get_login_page(request: fastapi.Request):
     return HTMLResponse(open(os.path.join(STATIC_FILES_FLD, "login.html")).read())
 
 
-# Авторизация
+# ── AUTH ──────────────────────────────────────────────────────────────────
 
 
 @app.post("/auth/register")
 @limiter.limit("5/minute")
 async def register(request: fastapi.Request, response: Response) -> dict:
-    """
-    Заголовки:
-      oleg-password-hash  — sha256(login + password), уникальный ключ
-      oleg-name        — отображаемое имя
-    Возвращает access_token + refresh_token.
-    """
     password_hash = request.headers.get("oleg-password-hash")
-    
     if not password_hash:
         raise HTTPException(status_code=400, detail="oleg-password-hash header missing")
-    
+
     username = (request.headers.get("oleg-name") or "").strip()
     if not username or len(username) > 32:
         raise HTTPException(400, "Invalid username")
-    
+
     existing = cursor.execute(
         "SELECT id FROM members WHERE password_hash = ?", (password_hash,)
     ).fetchone()
-
     if existing:
         raise HTTPException(status_code=409, detail="User already exists")
 
     user_id = str(uuid.uuid4())
-
     cursor.execute(
         "INSERT INTO members (id, password_hash, name, created_at) VALUES (?, ?, ?, ?)",
         (user_id, password_hash, username, _now_utc().isoformat()),
@@ -360,15 +398,12 @@ async def register(request: fastapi.Request, response: Response) -> dict:
         samesite="lax",
         httponly=True,
         secure=True,
-        max_age=60 * 60 * 24 * 30, # месяц в секундах
+        max_age=60 * 60 * 24 * 30,
     )
-
-
     return {
         "ok": True,
         "id": user_id,
         "access_token": create_token(user_id, username),
-        # "refresh_token": create_refresh_token(user_id),
         "token_type": "bearer",
     }
 
@@ -376,11 +411,6 @@ async def register(request: fastapi.Request, response: Response) -> dict:
 @app.post("/auth/login")
 @limiter.limit("10/minute")
 async def login(request: fastapi.Request, response: Response) -> dict:
-    """
-    Заголовок:
-      oleg-password-hash  — sha256(login + password)
-    Возвращает access_token + refresh_token.
-    """
     password_hash = request.headers.get("oleg-password-hash")
     if not password_hash:
         raise HTTPException(400, "oleg-password-hash missing")
@@ -400,91 +430,85 @@ async def login(request: fastapi.Request, response: Response) -> dict:
         samesite="lax",
         httponly=True,
         secure=True,
-        max_age=60 * 60 * 24 * 30, # месяц в секундах
+        max_age=60 * 60 * 24 * 30,
     )
-
     return {
         "ok": True,
         "id": user_id,
         "access_token": create_token(user_id, user_name),
-        # "refresh_token": create_refresh_token(user_id), #уйдёт в куку
         "token_type": "bearer",
     }
 
 
 @app.post("/auth/refresh")
 @limiter.limit("30/minute")
-async def refresh_tokens(request: fastapi.Request, refresh_token: str | None = Cookie(alias="refresh-token", default=None)) -> dict:
-    """
-    Возвращает новый access_token. Refresh-токен остаётся тем же.
-    (Можно сделать rotation — менять и refresh тоже — раскомментив строки ниже.)
-    """
+async def refresh_tokens(
+    request: fastapi.Request,
+    refresh_token: str | None = Cookie(alias="refresh-token", default=None),
+) -> dict:
     if not refresh_token:
         raise HTTPException(400, "Refresh token not found")
 
     payload = decode_token(refresh_token)
-    
     jti = payload.get("jti")
     user_id = payload.get("sub")
     _type = payload.get("type")
-    
-    if not  _type or _type != "refresh" or user_id is None:
+
+    if not _type or _type != "refresh" or user_id is None:
         raise HTTPException(401, "Invalid token")
-    
+
     row = cursor.execute(
         "SELECT expires_at, revoked FROM refresh_tokens WHERE jti = ?", (jti,)
     ).fetchone()
-
     if not row:
         raise HTTPException(status_code=401, detail="Token not found")
     if row["revoked"]:
         raise HTTPException(status_code=401, detail="Token revoked")
 
-    user_row: sqlite3.Row = cursor.execute("SELECT name FROM members WHERE id = ?", (user_id, )).fetchone()
+    user_row = cursor.execute(
+        "SELECT name FROM members WHERE id = ?", (user_id,)
+    ).fetchone()
     if not user_row:
         raise HTTPException(400, "There are no user with that token")
 
-    user_name = user_row['name']
-    # --- Rotation (опционально) ---
-    # conn.execute("UPDATE refresh_tokens SET revoked=1 WHERE jti=?", (jti,))
-    # new_refresh = create_refresh_token(user_id)
-
+    user_name = user_row["name"]
     return {
         "access_token": create_token(user_id, user_name),
-        # "refresh_token": new_refresh,  # при rotation
         "token_type": "bearer",
-        "name": user_name
+        "name": user_name,
     }
 
 
 @app.post("/auth/logout")
 @limiter.limit("10/minute")
 async def logout(
-    request: fastapi.Request, refresh_token: str | None = Cookie(alias="refresh-token", default=None), current_user: dict = Depends(get_current_user)
+    request: fastapi.Request,
+    refresh_token: str | None = Cookie(alias="refresh-token", default=None),
+    current_user: dict = Depends(get_current_user),
 ) -> dict:
     if not refresh_token:
         raise HTTPException(400, "Refresh token not found")
     try:
         payload = decode_token(refresh_token)
         revoke_token(payload.get("jti", ""))
-    except:
+    except Exception:
         pass
     return {"ok": True}
 
 
 @app.post("/auth/logout_all")
 @limiter.limit("1/minutes")
-async def logout_all(request: fastapi.Request, current_user: dict = Depends(get_current_user)) -> dict:
-    """Инвалидирует все refresh-токены пользователя (выход на всех устройствах)."""
+async def logout_all(
+    request: fastapi.Request, current_user: dict = Depends(get_current_user)
+) -> dict:
     cursor.execute(
-        "UPDATE refresh_tokens SET revoked=1 WHERE user_id=?",
-        (current_user["sub"],),
+        "UPDATE refresh_tokens SET revoked=1 WHERE user_id=?", (current_user["sub"],)
     )
     conn.commit()
     return {"ok": True}
 
 
-# GLOBAL CHAT
+# ── GLOBAL CHAT ───────────────────────────────────────────────────────────
 
 
 @app.post("/send_msg")
@@ -493,23 +517,23 @@ async def send_msg(
     request: fastapi.Request,
     current_user: dict = Depends(get_current_user),
 ):
-    """Body JSON: { "text": "..." }"""
+    """Body JSON: { "text": "...", "attachments": [{"url": "/img/...", "mime": "image/jpeg", "original_name": "photo.jpg"}] }"""
     body = await request.json()
     text = body.get("text", "").strip()
+    attachments: list[dict] = body.get("attachments") or []
 
-    if not text:
+    if not text and not attachments:
         raise HTTPException(status_code=400, detail="Empty message")
-
     if len(text) > 4096:
         raise HTTPException(status_code=400, detail="Message too long")
 
     user_id = current_user["sub"]
     row = cursor.execute("SELECT name FROM members WHERE id = ?", (user_id,)).fetchone()
-
     if not row:
         raise HTTPException(403, "Username not found")
 
-    msg = save_global_msg(user_id, row["name"], text)
+    msg = save_global_msg(user_id, row["name"], text, attachments)
+
     dead = []
     for ws in global_clients:
         try:
@@ -538,7 +562,7 @@ async def global_ws(ws: WebSocket):
             global_clients.remove(ws)
 
 
-# P2P CHATS
+# ── P2P CHATS ─────────────────────────────────────────────────────────────
 
 
 @app.get("/chat/open")
@@ -558,7 +582,9 @@ async def open_chat(
 
 @app.get("/my/chats")
 @limiter.limit("60/minute")
-async def my_chats(request: fastapi.Request,current_user: dict = Depends(get_current_user)):
+async def my_chats(
+    request: fastapi.Request, current_user: dict = Depends(get_current_user)
+):
     my_id = current_user["sub"]
     rows = cursor.execute(
         """
@@ -606,7 +632,6 @@ async def get_p2p_chat(
     before_id: int | None = None,
     current_user: dict = Depends(get_current_user),
 ):
-    # Проверяем, что юзер — участник чата
     row = cursor.execute(
         "SELECT 1 FROM chats WHERE chat_id=? AND user_id=?",
         (chat_id, current_user["sub"]),
@@ -625,9 +650,9 @@ async def send_p2p_msg(
     request: fastapi.Request,
     current_user: dict = Depends(get_current_user),
 ):
+    """Body JSON: { "text": "...", "attachments": [...] }"""
     sender_id = current_user["sub"]
 
-    # Проверяем членство
     membership = cursor.execute(
         "SELECT 1 FROM chats WHERE chat_id=? AND user_id=?", (chat_id, sender_id)
     ).fetchone()
@@ -640,10 +665,14 @@ async def send_p2p_msg(
 
     body = await request.json()
     text = body.get("text", "").strip()
-    if not text:
-        raise HTTPException(status_code=400, detail="Empty message")
+    attachments: list[dict] = body.get("attachments") or []
 
-    msg = save_p2p_msg(chat_id, sender_id, row["name"], text)
+    if not text and not attachments:
+        raise HTTPException(status_code=400, detail="Empty message")
+    if len(text) > 4096:
+        raise HTTPException(status_code=400, detail="Message too long")
+
+    msg = save_p2p_msg(chat_id, sender_id, row["name"], text, attachments)
 
     dead = []
     for ws in p2p_clients.get(chat_id, []):
@@ -659,7 +688,6 @@ async def send_p2p_msg(
 
 @app.websocket("/ws/chat/{chat_id}")
 async def p2p_ws(chat_id: str, ws: WebSocket):
-    # Токен передаётся query-параметром, т.к. браузерный WebSocket не поддерживает заголовки
     token = ws.query_params.get("token")
     if not token:
         await ws.close(code=4001)
@@ -693,40 +721,52 @@ async def p2p_ws(chat_id: str, ws: WebSocket):
             p2p_clients[chat_id].remove(ws)
 
 
-async def __default_get_content(entry_id: str | None, folder: str, ttype: Literal["Image","Audio","Video","File"]) -> FileResponse:
+# ── FILE SERVING ──────────────────────────────────────────────────────────
+
+
+async def __default_get_content(
+    entry_id: str | None, folder: str, ttype: Literal["Image", "Audio", "Video", "File"]
+) -> FileResponse:
     if entry_id is None:
         raise HTTPException(404, f"{ttype} not found")
-    
+
     path_to = os.path.join(folder, entry_id)
+    real_folder = os.path.realpath(folder)
     if not os.path.isfile(path_to):
         raise HTTPException(404, f"{ttype} not found")
-    if not os.path.realpath(path_to).startswith(folder):
+    if not os.path.realpath(path_to).startswith(real_folder):
         raise HTTPException(404, f"{ttype} not found")
-    
+
     mime, _ = mimetypes.guess_type(entry_id)
     media_type = mime or "application/octet-stream"
-
     return FileResponse(path_to, media_type=media_type)
 
+
 @app.get("/img/{img_id}", response_class=FileResponse)
-@limiter.limit("10/minute")
+@limiter.limit("60/minute")
 async def get_image(request: fastapi.Request, img_id: str | None = None):
     return await __default_get_content(img_id, USER_IMAGES_FLD, "Image")
 
+
 @app.get("/audio/{audio_id}", response_class=FileResponse)
-@limiter.limit("10/minute")
+@limiter.limit("60/minute")
 async def get_audio(request: fastapi.Request, audio_id: str | None = None):
     return await __default_get_content(audio_id, USER_AUDIO_FLD, "Audio")
 
+
 @app.get("/video/{video_id}", response_class=FileResponse)
-@limiter.limit("10/minute")
+@limiter.limit("60/minute")
 async def get_video(request: fastapi.Request, video_id: str | None = None):
     return await __default_get_content(video_id, USER_VIDEO_FLD, "Video")
 
+
 @app.get("/file/{file_id}")
-@limiter.limit("10/minute")
+@limiter.limit("60/minute")
 async def get_file(request: fastapi.Request, file_id: str | None = None):
     return await __default_get_content(file_id, USER_FILES_FLD, "File")
+
+
+# ── FILE UPLOAD ───────────────────────────────────────────────────────────
 
 
 def _get_category(ext: str) -> str:
@@ -743,13 +783,13 @@ async def upload_file(
     file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user),
 ):
-    ext = os.path.splitext(file.filename or "")[1].lower()
+    original_name = file.filename or "file"
+    ext = os.path.splitext(original_name)[1].lower()
     if not ext:
         raise HTTPException(400, "Cannot determine file extension")
 
-    mime, _ = mimetypes.guess_type(file.filename or "")
-    if not mime:
-        raise HTTPException(415, "Unknown file type")
+    mime, _ = mimetypes.guess_type(original_name)
+    mime = mime or "application/octet-stream"
 
     category = _get_category(ext)
     max_size = MAX_SIZES[category]
@@ -762,11 +802,21 @@ async def upload_file(
     folder = FOLDERS[category]
 
     path = os.path.realpath(os.path.join(folder, file_id))
+    if not path.startswith(os.path.realpath(folder)):
+        raise HTTPException(400, "Invalid filename")
 
     with open(path, "wb") as f:
         f.write(data)
 
-    return {"ok": True, "file_id": file_id, "category": category, "mime": mime}
+    url = f"{URL_PREFIXES[category]}/{file_id}"
+    return {
+        "ok": True,
+        "file_id": file_id,
+        "url": url,
+        "category": category,
+        "mime": mime,
+        "original_name": original_name,
+    }
 
 
 if __name__ == "__main__":

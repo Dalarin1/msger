@@ -32,10 +32,22 @@ CREATE TABLE IF NOT EXISTS global_messages (
 );
 
 CREATE TABLE IF NOT EXISTS p2p_messages (
-    id        INTEGER PRIMARY KEY AUTOINCREMENT,
-    chat_id   TEXT NOT NULL,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chat_id TEXT NOT NULL,
     sender_id TEXT NOT NULL,
-    sender    TEXT NOT NULL,
-    text      TEXT NOT NULL,
+    sender TEXT NOT NULL,
+    text TEXT NOT NULL,
     timestamp TEXT NOT NULL
+);
+
+-- Вложения к сообщениям.
+-- message_type: 'global' или 'p2p'
+-- url: путь вида /img/uuid.jpg, /audio/uuid.mp3 и т.д.
+CREATE TABLE IF NOT EXISTS message_attachments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    message_id INTEGER NOT NULL,
+    message_type TEXT NOT NULL CHECK(message_type IN ('global', 'p2p')),
+    url TEXT NOT NULL,
+    mime TEXT,
+    original_name TEXT
 );
