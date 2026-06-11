@@ -6,6 +6,9 @@ import uuid
 import jwt
 import os
 
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from datetime import datetime, timedelta, timezone
 from fastapi import WebSocket, WebSocketDisconnect, Depends, Response, Cookie
 from fastapi.responses import HTMLResponse, FileResponse
@@ -23,7 +26,9 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATABASE_FOLDER = os.path.join(BASE_DIR, "database")
 DB_PATH = os.path.join(DATABASE_FOLDER, "app.db")
 MAKE_TABLES_SCRIPT_PATH = os.path.join(BASE_DIR, "make_tables.sqlite3")
+STATIC_FILES_FLD = os.path.join(BASE_DIR, "static")
 
+limiter = Limiter(key_func=get_remote_address)
 app = fastapi.FastAPI()
 app.add_middleware(
     CORSMiddleware,
@@ -32,11 +37,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 bearer_scheme = HTTPBearer(auto_error=False)
 
-conn: sqlite3.Connection | None = None
-cursor: sqlite3.Cursor | None = None
-
+conn: sqlite3.Connection 
+cursor: sqlite3.Cursor   
 
 def make_environ() -> None:
     global conn, cursor
@@ -241,39 +248,42 @@ p2p_clients: dict[str, list[WebSocket]] = {}
 
 
 @app.get("/", response_class=HTMLResponse)
-async def get_index():
-    return HTMLResponse(open("index.html").read())
+@limiter.limit("30/minute")
+async def get_index(request: fastapi.Request):
+    return HTMLResponse(open(os.path.join(STATIC_FILES_FLD, "index.html")).read())
 
 
 @app.get("/sha256.js")
-async def get_sha256():
-    return FileResponse("sha256.js", media_type="application/javascript")
+@limiter.limit("30/minute")
+async def get_sha256(request: fastapi.Request):
+    # return FileResponse("sha256.js", media_type="application/javascript")
+    return FileResponse(os.path.join(STATIC_FILES_FLD, "sha256.js"), media_type="application/javascript")
 
 
 @app.get("/chat", response_class=HTMLResponse)
-async def get_chat_html():
-    return HTMLResponse(open("chat.html").read())
-
-
 @app.get("/chat/", response_class=HTMLResponse)
-async def get_chat_html_2():
-    return HTMLResponse(open("chat.html").read())
+@limiter.limit("30/minute")
+async def get_chat_html(request: fastapi.Request):
+    return HTMLResponse(open(os.path.join(STATIC_FILES_FLD, "chat.html")).read())
 
 
 @app.get("/profile", response_class=HTMLResponse)
-async def get_profile_html():
-    return HTMLResponse(open("profile.html").read())
+@limiter.limit("30/minute")
+async def get_profile_html(request: fastapi.Request):
+    return HTMLResponse(open(os.path.join(STATIC_FILES_FLD, "profile.html")).read())
 
 
 @app.get("/login")
-async def get_login_page():
-    return HTMLResponse(open("login.html").read())
+@limiter.limit("30/minute")
+async def get_login_page(request: fastapi.Request):
+    return HTMLResponse(open(os.path.join(STATIC_FILES_FLD, "login.html")).read())
 
 
 # Авторизация
 
 
 @app.post("/auth/register")
+@limiter.limit("5/minute")
 async def register(request: fastapi.Request, response: Response) -> dict:
     """
     Заголовки:
@@ -282,10 +292,14 @@ async def register(request: fastapi.Request, response: Response) -> dict:
     Возвращает access_token + refresh_token.
     """
     password_hash = request.headers.get("oleg-password-hash")
-    username = request.headers.get("oleg-name")
+    
     if not password_hash:
         raise HTTPException(status_code=400, detail="oleg-password-hash header missing")
-
+    
+    username = (request.headers.get("oleg-name") or "").strip()
+    if not username or len(username) > 32:
+        raise HTTPException(400, "Invalid username")
+    
     existing = cursor.execute(
         "SELECT id FROM members WHERE password_hash = ?", (password_hash,)
     ).fetchone()
@@ -306,7 +320,7 @@ async def register(request: fastapi.Request, response: Response) -> dict:
         value=create_refresh_token(user_id),
         samesite="lax",
         httponly=True,
-        # secure=True,
+        secure=True,
         max_age=60 * 60 * 24 * 30, # месяц в секундах
     )
 
@@ -321,6 +335,7 @@ async def register(request: fastapi.Request, response: Response) -> dict:
 
 
 @app.post("/auth/login")
+@limiter.limit("10/minute")
 async def login(request: fastapi.Request, response: Response) -> dict:
     """
     Заголовок:
@@ -343,7 +358,7 @@ async def login(request: fastapi.Request, response: Response) -> dict:
     response.set_cookie(
         key="refresh-token",
         value=create_refresh_token(user_id),
-        samesite="strict",
+        samesite="lax",
         httponly=True,
         secure=True,
         max_age=60 * 60 * 24 * 30, # месяц в секундах
@@ -359,16 +374,24 @@ async def login(request: fastapi.Request, response: Response) -> dict:
 
 
 @app.post("/auth/refresh")
-async def refresh_tokens(refresh_token: str | None = Cookie(alias="refresh-token", default=None)) -> dict:
+@limiter.limit("30/minute")
+async def refresh_tokens(request: fastapi.Request, refresh_token: str | None = Cookie(alias="refresh-token", default=None)) -> dict:
     """
     Возвращает новый access_token. Refresh-токен остаётся тем же.
     (Можно сделать rotation — менять и refresh тоже — раскомментив строки ниже.)
     """
+    if not refresh_token:
+        raise HTTPException(400, "Refresh token not found")
+
     payload = decode_token(refresh_token)
     
     jti = payload.get("jti")
     user_id = payload.get("sub")
-
+    _type = payload.get("type")
+    
+    if not  _type or _type != "refresh" or user_id is None:
+        raise HTTPException(401, "Invalid token")
+    
     row = cursor.execute(
         "SELECT expires_at, revoked FROM refresh_tokens WHERE jti = ?", (jti,)
     ).fetchone()
@@ -378,7 +401,11 @@ async def refresh_tokens(refresh_token: str | None = Cookie(alias="refresh-token
     if row["revoked"]:
         raise HTTPException(status_code=401, detail="Token revoked")
 
-    user_name = cursor.execute("SELECT name FROM members WHERE id = ?", (user_id, )).fetchone()['name']
+    user_row: sqlite3.Row = cursor.execute("SELECT name FROM members WHERE id = ?", (user_id, )).fetchone()
+    if not user_row:
+        raise HTTPException(400, "There are no user with that token")
+
+    user_name = user_row['name']
     # --- Rotation (опционально) ---
     # conn.execute("UPDATE refresh_tokens SET revoked=1 WHERE jti=?", (jti,))
     # new_refresh = create_refresh_token(user_id)
@@ -392,19 +419,23 @@ async def refresh_tokens(refresh_token: str | None = Cookie(alias="refresh-token
 
 
 @app.post("/auth/logout")
+@limiter.limit("10/minute")
 async def logout(
-    refresh_token: str | None = Cookie(alias="refresh-token", default=None), current_user: dict = Depends(get_current_user)
+    request: fastapi.Request, refresh_token: str | None = Cookie(alias="refresh-token", default=None), current_user: dict = Depends(get_current_user)
 ) -> dict:
+    if not refresh_token:
+        raise HTTPException(400, "Refresh token not found")
     try:
         payload = decode_token(refresh_token)
-        revoke_token(payload.get("jti"))
+        revoke_token(payload.get("jti", ""))
     except:
         pass
     return {"ok": True}
 
 
 @app.post("/auth/logout_all")
-async def logout_all(current_user: dict = Depends(get_current_user)) -> dict:
+@limiter.limit("1/minutes")
+async def logout_all(request: fastapi.Request, current_user: dict = Depends(get_current_user)) -> dict:
     """Инвалидирует все refresh-токены пользователя (выход на всех устройствах)."""
     cursor.execute(
         "UPDATE refresh_tokens SET revoked=1 WHERE user_id=?",
@@ -418,6 +449,7 @@ async def logout_all(current_user: dict = Depends(get_current_user)) -> dict:
 
 
 @app.post("/send_msg")
+@limiter.limit("30/minute")
 async def send_msg(
     request: fastapi.Request,
     current_user: dict = Depends(get_current_user),
@@ -428,6 +460,9 @@ async def send_msg(
 
     if not text:
         raise HTTPException(status_code=400, detail="Empty message")
+
+    if len(text) > 4096:
+        raise HTTPException(status_code=400, detail="Message too long")
 
     user_id = current_user["sub"]
     row = cursor.execute("SELECT name FROM members WHERE id = ?", (user_id,)).fetchone()
@@ -468,7 +503,9 @@ async def global_ws(ws: WebSocket):
 
 
 @app.get("/chat/open")
+@limiter.limit("60/minute")
 async def open_chat(
+    request: fastapi.Request,
     with_id: str,
     current_user: dict = Depends(get_current_user),
 ):
@@ -481,7 +518,8 @@ async def open_chat(
 
 
 @app.get("/my/chats")
-async def my_chats(current_user: dict = Depends(get_current_user)):
+@limiter.limit("60/minute")
+async def my_chats(request: fastapi.Request,current_user: dict = Depends(get_current_user)):
     my_id = current_user["sub"]
     rows = cursor.execute(
         """
@@ -521,7 +559,9 @@ async def my_chats(current_user: dict = Depends(get_current_user)):
 
 
 @app.get("/chat/{chat_id}")
+@limiter.limit("60/minute")
 async def get_p2p_chat(
+    request: fastapi.Request,
     chat_id: str,
     count: int = 100,
     before_id: int | None = None,
@@ -540,6 +580,7 @@ async def get_p2p_chat(
 
 
 @app.post("/chat/{chat_id}/")
+@limiter.limit("60/minute")
 async def send_p2p_msg(
     chat_id: str,
     request: fastapi.Request,
