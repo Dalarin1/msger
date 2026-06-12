@@ -40,7 +40,7 @@ main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
     align-items: center;
     gap: 10px;
 }
-.topbar span { font-size: 12px; color: #999; font-weight: 400; margin-left: auto; }
+.topbar span { font-size: 12px; color: #999; font-weight: 400; }
 
 .screen { display: none; flex: 1; flex-direction: column; overflow: hidden; }
 .screen.active { display: flex; }
@@ -319,12 +319,13 @@ main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
     <div class="logo">Oleg Chat</div>
     <a href="/">Главная</a>
     <a href="/chat" class="active">Мои чаты</a>
-    <a href="/profile">Профиль</a>
+    <a href="/profile">Профиль <span id="my-name"></span></a>
 </nav>
 
 <main>
     <div class="topbar">
-        <span id="topbarTitle">Мои чаты</span>
+        Мои чаты
+        <span id="topbarTitle"></span>
         <span id="wsStatus"></span>
         <button id="backBtn" onclick="goToList()"
             style="display:none;background:none;color:#555;border:1px solid #ddd;
@@ -398,6 +399,15 @@ async function refreshAccessToken() {
     const data = await res.json();
     accessToken = data.access_token;
     myId = parseJwtPayload(accessToken)?.sub ?? null;
+
+    var profile_name = "";
+    if (data.name.length > 15){
+        profile_name = data.name.substring(0, 12) + "...";
+    } else {
+        profile_name = data.name;
+    }
+    document.getElementById("my-name").textContent = profile_name;
+
     return true;
 }
 
@@ -517,7 +527,7 @@ function connectWs(chatId) {
 
     const st = document.getElementById("wsStatus");
     ws.onopen  = () => { st.textContent = "online";  st.style.color = "#16a34a"; };
-    ws.onclose = () => { st.textContent = "offline"; st.style.color = "#999"; };
+    ws.onclose = () => { st.textContent = ""; st.style = ""; };
     ws.onerror = () => { st.textContent = "ошибка";  st.style.color = "#e53e3e"; };
 
     ws.onmessage = (e) => {
@@ -664,7 +674,7 @@ function goToList() {
     currentChatId = null;
     pendingAttachments = [];
     renderPendingChips();
-    document.getElementById("topbarTitle").textContent = "Мои чаты";
+    document.getElementById("topbarTitle").textContent = "";
     document.getElementById("backBtn").style.display = "none";
     document.getElementById("wsStatus").textContent = "";
     loadChats();

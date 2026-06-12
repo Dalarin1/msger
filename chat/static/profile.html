@@ -133,7 +133,7 @@
         <div class="logo">Oleg Chat</div>
         <a href="/">Главная</a>
         <a href="/chat">Мои чаты</a>
-        <a href="/profile" class="active">Профиль</a>
+        <a href="/profile" class="active">Профиль <span id="my-name"></span></a>
     </nav>
 
     <main>
@@ -192,6 +192,14 @@
             myName = payload?.nam ?? null;
             document.getElementById("userId").textContent = myId;
             document.getElementById("userName").textContent = myName;
+
+            var profile_name = "";
+            if (myName.length > 15){
+                profile_name = myName.substring(0, 12) + "...";
+            } else {
+                profile_name = myName;
+            }
+            document.getElementById("my-name").textContent = profile_name;
             return true;
         }
 

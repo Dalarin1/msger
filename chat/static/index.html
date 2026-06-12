@@ -56,7 +56,7 @@ main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
     border: 1px solid #e5e7eb;
     border-radius: 14px;
     padding: 8px 14px;
-    max-width: 700px;
+    max-width: 60%;
 }
 
 .meta { font-size: 12px; color: #999; margin-bottom: 3px; }
@@ -185,7 +185,7 @@ main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
     <div class="logo">Oleg Chat</div>
     <a href="/" class="active">Главная</a>
     <a href="/chat">Мои чаты</a>
-    <a href="/profile">Профиль</a>
+    <a href="/profile">Профиль <span id="my-name"></span></a>
 </nav>
 
 <main>
@@ -232,6 +232,15 @@ async function refreshAccessToken() {
     if (!res.ok) return false;
     const data = await res.json();
     accessToken = data.access_token;
+
+    var profile_name = "";
+    if (data.name.length > 15){
+        profile_name = data.name.substring(0, 12) + "...";
+    } else {
+        profile_name = data.name;
+    }
+    document.getElementById("my-name").textContent = profile_name;
+
     return true;
 }
 
