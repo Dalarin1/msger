@@ -9,7 +9,7 @@
 
 body {
     font-family: system-ui, sans-serif;
-    background: #f6f7f9;
+    background: #939393;
     height: 100vh;
     display: flex;
 }
@@ -17,7 +17,7 @@ body {
 nav {
     width: 200px;
     background: white;
-    border-right: 1px solid #e5e7eb;
+    border-right: 1px solid #949494;
     display: flex;
     flex-direction: column;
     padding: 20px 0;
@@ -78,7 +78,10 @@ main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 }
 .attachment-link:hover { text-decoration: underline; opacity: .8; }
 .attachment-link .icon { font-size: 14px; }
-
+.attachment-image{
+    /* max-height: fit-content; */
+    max-width: 100%;
+}
 /* прикреплённые файлы (pending) */
 #pendingFiles {
     display: flex;

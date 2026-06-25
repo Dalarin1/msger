@@ -158,8 +158,8 @@
         let accessToken = null;
         let myId = null;
         // let myName = localStorage.getItem("name") || "—";
-        let myName =null;
-        
+        let myName = null;
+
         document.getElementById("userId").textContent = myId;
         document.getElementById("userName").textContent = myName;
 
@@ -180,11 +180,15 @@
         }
 
         async function refreshAccessToken() {
+
             const res = await fetch("/auth/refresh", {
                 method: "POST",
                 credentials: "include",
             });
-            if (!res.ok) return false;
+            if (!res.ok) {
+                document.location.href = "/login";
+                return false;
+            }
             const data = await res.json();
             accessToken = data.access_token;
             const payload = parseJwtPayload(accessToken);
@@ -194,7 +198,7 @@
             document.getElementById("userName").textContent = myName;
 
             var profile_name = "";
-            if (myName.length > 15){
+            if (myName.length > 15) {
                 profile_name = myName.substring(0, 12) + "...";
             } else {
                 profile_name = myName;

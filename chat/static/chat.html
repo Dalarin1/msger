@@ -159,7 +159,10 @@ main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 .theirs .attachment-link { color: #4f46e5; }
 .attachment-link:hover { opacity: 1; text-decoration: underline; }
 .attachment-link .icon { font-size: 14px; flex-shrink: 0; }
-
+.attachment-image{
+    /* max-height: fit-content; */
+    max-width: 100%;
+}
 /* ── прикреплённые файлы (pending) ── */
 #pendingFiles {
     display: flex;
@@ -557,7 +560,7 @@ function attachmentIcon(mime) {
     if (mime.startsWith("video/")) return "🎬";
     return "📄";
 }
-
+/*
 function renderAttachments(attachments, isMine) {
     if (!attachments || !attachments.length) return "";
     return `<div class="attachments">${attachments.map(a => {
@@ -567,8 +570,70 @@ function renderAttachments(attachments, isMine) {
             <span class="icon">${icon}</span>${label}
         </a>`;
     }).join("")}</div>`;
+}*/
+
+function renderCommonAttachementLink(url, icon, label) {
+    return `
+        <a class="attachment-file"
+           href="${escapeHtml(url)}"
+           target="_blank"
+           rel="noopener">
+            <span>${icon}</span>
+            <span>${label}</span>
+        </a>
+    `;
 }
 
+function renderImageOrVideoAttachements(att) {
+    const url = escapeHtml(att.url);
+
+    if (att.mime?.startsWith("image/")) {
+        return `
+            <a href="${url}" target="_blank">
+                <img
+                    class="attachment-image"
+                    src="${url}"
+                    loading="lazy"
+                    alt="">
+            </a>
+        `;
+    }
+
+    if (att.mime?.startsWith("video/")) {
+        return `
+            <video
+                class="attachment-video"
+                controls
+                preload="metadata">
+                <source src="${url}" type="${att.mime}">
+            </video>
+        `;
+    }
+
+    return null;
+}
+function renderAttachments(attachments) {
+    if (!attachments?.length) return "";
+
+    return `
+        <div class="attachments">
+            ${attachments.map(att => {
+
+                const media =
+                    renderImageOrVideoAttachements(att);
+
+                if (media) return media;
+
+                return renderCommonAttachementLink(
+                    att.url,
+                    attachmentIcon(att.mime),
+                    escapeHtml(att.original_name || att.url)
+                );
+
+            }).join("")}
+        </div>
+    `;
+}
 function addMessage(msg, prevMsg) {
     const isMine   = msg.sender_id === myId;
     const isSameAuthor = prevMsg && prevMsg.sender_id === msg.sender_id;

@@ -7,7 +7,7 @@ import uuid
 import jwt
 import os
 
-
+from hashlib import sha256
 from typing import Literal
 from urllib.parse import quote
 from slowapi.util import get_remote_address
@@ -29,7 +29,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 #    CONFIG
-SECRET_KEY = os.environ.get("SECRET_KEY", "change-me-in-production-please")
+SECRET_KEY = os.environ.get("SECRET_KEY", "change_me_in_production_please_for_32+_char_password")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_TTL = timedelta(minutes=15)
 REFRESH_TOKEN_TTL = timedelta(days=30)
@@ -729,6 +729,8 @@ async def p2p_ws(chat_id: str, ws: WebSocket):
 async def __default_get_content(
     entry_id: str | None, folder: str, ttype: Literal["Image", "Audio", "Video", "File"]
 ) -> FileResponse:
+    
+    
     if entry_id is None:
         raise HTTPException(404, f"{ttype} not found")
 
@@ -815,15 +817,14 @@ async def upload_file(
     if len(data) > max_size:
         raise HTTPException(413, f"File too large (max {max_size // 1024 // 1024} MB)")
 
-    file_id = str(uuid.uuid4()) + ext
+    file_id = sha256(data).hexdigest() + ext
     folder = FOLDERS[category]
 
-    path = os.path.realpath(os.path.join(folder, file_id))
-    if not path.startswith(os.path.realpath(folder)):
-        raise HTTPException(400, "Invalid filename")
-
-    with open(path, "wb") as f:
-        f.write(data)
+    path = os.path.join(folder, file_id)
+    
+    if not os.path.exists(path):
+        with open(path, "wb") as f:
+            f.write(data)
 
     url = f"{URL_PREFIXES[category]}/{file_id}"
 
