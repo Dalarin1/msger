@@ -7,10 +7,12 @@ import uuid
 import jwt
 import os
 
+
 from typing import Literal
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from urllib.parse import quote
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from slowapi import Limiter, _rate_limit_exceeded_handler
 from datetime import datetime, timedelta, timezone
 from fastapi import (
     WebSocket,
@@ -38,11 +40,11 @@ DB_PATH = os.path.join(DATABASE_FOLDER, "app.db")
 MAKE_TABLES_SCRIPT_PATH = os.path.join(BASE_DIR, "make_tables.sqlite3")
 STATIC_FILES_FLD = os.path.join(BASE_DIR, "static")
 
-FILES_FLD = os.path.join(BASE_DIR, "files")
-USER_IMAGES_FLD = os.path.join(FILES_FLD, "images")
-USER_AUDIO_FLD = os.path.join(FILES_FLD, "audios")
-USER_VIDEO_FLD = os.path.join(FILES_FLD, "videos")
-USER_FILES_FLD = os.path.join(FILES_FLD, "others")
+ATTACHEMENTS_FLD = os.path.join(BASE_DIR, "attachments")
+USER_IMAGES_FLD = os.path.join(ATTACHEMENTS_FLD, "images")
+USER_AUDIO_FLD = os.path.join(ATTACHEMENTS_FLD, "audios")
+USER_VIDEO_FLD = os.path.join(ATTACHEMENTS_FLD, "videos")
+USER_FILES_FLD = os.path.join(ATTACHEMENTS_FLD, "others")
 
 MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10 МБ
 MAX_AUDIO_SIZE = 30 * 1024 * 1024  # 30 МБ
@@ -50,7 +52,7 @@ MAX_VIDEO_SIZE = 100 * 1024 * 1024  # 100 МБ
 MAX_FILE_SIZE = 500 * 1024 * 1024  # 500 МБ
 
 ALLOWED_EXTENSIONS = {
-    "image": {".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"},
+    "image": {".jpg", ".jpeg", ".png", ".gif", ".jfif", ".webp", ".svg"},
     "video": {".mp4", ".webm"},
     "audio": {".mp3", ".wav", ".ogg"},
 }
@@ -739,7 +741,22 @@ async def __default_get_content(
 
     mime, _ = mimetypes.guess_type(entry_id)
     media_type = mime or "application/octet-stream"
-    return FileResponse(path_to, media_type=media_type)
+    url = URL_PREFIXES[ttype.lower()] + "/" + entry_id
+    filename = cursor.execute(
+        "SELECT original_name FROM message_attachments WHERE url = ?", (url,)
+    ).fetchone()
+    
+    if filename is None:
+        raise HTTPException(404, "Requested file not found")
+    
+    filename = filename["original_name"]
+
+    return FileResponse(
+        path_to,
+        media_type=media_type,
+        filename=filename,
+        headers={"Content-Disposition": f"attachment; filename={quote(filename)};"},
+    )
 
 
 @app.get("/img/{img_id}", response_class=FileResponse)
@@ -809,6 +826,7 @@ async def upload_file(
         f.write(data)
 
     url = f"{URL_PREFIXES[category]}/{file_id}"
+
     return {
         "ok": True,
         "file_id": file_id,

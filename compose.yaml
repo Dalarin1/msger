@@ -9,7 +9,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./database:/msger/database
-
+      - ./attachments:/msger/attachments
   voice:
     build: ./voice
     ports:

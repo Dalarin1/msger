@@ -281,15 +281,68 @@ function attachmentIcon(mime) {
     return "📄";
 }
 
+function renderCommonAttachementLink(url, icon, label) {
+    return `
+        <a class="attachment-file"
+           href="${escapeHtml(url)}"
+           target="_blank"
+           rel="noopener">
+            <span>${icon}</span>
+            <span>${label}</span>
+        </a>
+    `;
+}
+
+function renderImageOrVideoAttachements(att) {
+    const url = escapeHtml(att.url);
+
+    if (att.mime?.startsWith("image/")) {
+        return `
+            <a href="${url}" target="_blank">
+                <img
+                    class="attachment-image"
+                    src="${url}"
+                    loading="lazy"
+                    alt="">
+            </a>
+        `;
+    }
+
+    if (att.mime?.startsWith("video/")) {
+        return `
+            <video
+                class="attachment-video"
+                controls
+                preload="metadata">
+                <source src="${url}" type="${att.mime}">
+            </video>
+        `;
+    }
+
+    return null;
+}
+
 function renderAttachments(attachments) {
-    if (!attachments || !attachments.length) return "";
-    return `<div class="attachments">${attachments.map(a => {
-        const icon = attachmentIcon(a.mime);
-        const label = escapeHtml(a.original_name || a.url);
-        return `<a class="attachment-link" href="${escapeHtml(a.url)}" target="_blank" rel="noopener">
-            <span class="icon">${icon}</span>${label}
-        </a>`;
-    }).join("")}</div>`;
+    if (!attachments?.length) return "";
+
+    return `
+        <div class="attachments">
+            ${attachments.map(att => {
+
+                const media =
+                    renderImageOrVideoAttachements(att);
+
+                if (media) return media;
+
+                return renderCommonAttachementLink(
+                    att.url,
+                    attachmentIcon(att.mime),
+                    escapeHtml(att.original_name || att.url)
+                );
+
+            }).join("")}
+        </div>
+    `;
 }
 
 function add(msg) {
