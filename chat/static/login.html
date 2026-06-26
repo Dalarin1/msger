@@ -266,7 +266,7 @@
             const body = await res.json();
 
             if (body.access_token){
-                accessToken = body.accessToken;
+                accessToken = body.access_token;
                 localStorage.setItem("name", body.name);
             }
         }
@@ -287,10 +287,10 @@
             // отправить через POST /login с хедером oleg-password-hash
             // ok == true? -> redirect на /, иначе alert "Вставай, ты обосрался"
 
-            const hash = await sha256(name + password);
+            const hash = await sha256(password);
             const res = await fetch(`/auth/login`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json", "oleg-password-hash": hash },
+                headers: { "Content-Type": "application/json", "oleg-password-hash": hash, "oleg-name": name },
             });
             const data = await res.json();
 
@@ -311,7 +311,7 @@
             if (!name) return;
             if (pass !== pass2) { alert("Пароли не совпадают"); return; }
 
-            const hash = await sha256(name + pass);
+            const hash = await sha256(pass);
             const res = await fetch(`/auth/register`, {
                 method: "POST",
                 headers: { "oleg-name": name, "oleg-password-hash": hash }

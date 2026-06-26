@@ -1,7 +1,8 @@
 CREATE TABLE IF NOT EXISTS members (
     id TEXT PRIMARY KEY,
-    password_hash TEXT NOT NULL UNIQUE,
-    name TEXT,
+    password_hash TEXT NOT NULL,
+    name TEXT NOT NULL UNIQUE,
+    salt TEXT NOT NULL,
     created_at TEXT
 );
 

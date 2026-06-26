@@ -30,6 +30,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 #    CONFIG
 SECRET_KEY = os.environ.get("SECRET_KEY", "change_me_in_production_please_for_32+_char_password")
+PEPPER_KEY = os.environ.get("PEPPER_KEy", "change_me_in_production_please")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_TTL = timedelta(minutes=15)
 REFRESH_TOKEN_TTL = timedelta(days=30)
@@ -368,29 +369,35 @@ async def get_login_page(request: fastapi.Request):
 
 
 # ── AUTH ──────────────────────────────────────────────────────────────────
+def hash_with_salt_pepper(client_hash: str, salt: str) -> str:
+    combined = PEPPER_KEY + client_hash + salt
+    return sha256(combined.encode()).hexdigest()
 
 
 @app.post("/auth/register")
 @limiter.limit("5/minute")
 async def register(request: fastapi.Request, response: Response) -> dict:
+    username = request.headers.get("oleg-name")
     password_hash = request.headers.get("oleg-password-hash")
+
     if not password_hash:
         raise HTTPException(status_code=400, detail="oleg-password-hash header missing")
 
-    username = (request.headers.get("oleg-name") or "").strip()
     if not username or len(username) > 32:
-        raise HTTPException(400, "Invalid username")
+        raise HTTPException(status_code=400, detail="oleg-name header missing")
 
     existing = cursor.execute(
-        "SELECT id FROM members WHERE password_hash = ?", (password_hash,)
+        "SELECT id FROM members WHERE name = ?", (username,)
     ).fetchone()
     if existing:
         raise HTTPException(status_code=409, detail="User already exists")
 
     user_id = str(uuid.uuid4())
+    salt = os.urandom(32).hex()
+    final_hash = hash_with_salt_pepper(password_hash, salt)
     cursor.execute(
-        "INSERT INTO members (id, password_hash, name, created_at) VALUES (?, ?, ?, ?)",
-        (user_id, password_hash, username, _now_utc().isoformat()),
+        "INSERT INTO members (id, password_hash, name, salt, created_at) VALUES (?, ?, ?, ?, ?)",
+        (user_id, final_hash, username, salt, _now_utc().isoformat()),
     )
     conn.commit()
 
@@ -413,16 +420,25 @@ async def register(request: fastapi.Request, response: Response) -> dict:
 @app.post("/auth/login")
 @limiter.limit("10/minute")
 async def login(request: fastapi.Request, response: Response) -> dict:
-    password_hash = request.headers.get("oleg-password-hash")
-    if not password_hash:
+    username = (request.headers.get("oleg-name") or "").strip()
+    client_hash = request.headers.get("oleg-password-hash")
+
+    if not client_hash:
         raise HTTPException(400, "oleg-password-hash missing")
+    if not username or len(username) > 32:
+        raise HTTPException(400, "Invalid username")
 
     row = cursor.execute(
-        "SELECT id, name FROM members WHERE password_hash = ?", (password_hash,)
+        "SELECT id, name, password_hash, salt FROM members WHERE name = ?", (username,)
     ).fetchone()
+
     if not row:
         raise HTTPException(401, "Wrong login or password")
-
+    
+    final_hash = hash_with_salt_pepper(client_hash, row["salt"])
+    if final_hash != row["password_hash"]:
+        raise HTTPException(401, "Wrong login or password")
+    
     user_id = row["id"]
     user_name = row["name"]
 
@@ -729,8 +745,7 @@ async def p2p_ws(chat_id: str, ws: WebSocket):
 async def __default_get_content(
     entry_id: str | None, folder: str, ttype: Literal["Image", "Audio", "Video", "File"]
 ) -> FileResponse:
-    
-    
+
     if entry_id is None:
         raise HTTPException(404, f"{ttype} not found")
 
@@ -747,10 +762,10 @@ async def __default_get_content(
     filename = cursor.execute(
         "SELECT original_name FROM message_attachments WHERE url = ?", (url,)
     ).fetchone()
-    
+
     if filename is None:
         raise HTTPException(404, "Requested file not found")
-    
+
     filename = filename["original_name"]
 
     return FileResponse(
@@ -821,7 +836,7 @@ async def upload_file(
     folder = FOLDERS[category]
 
     path = os.path.join(folder, file_id)
-    
+
     if not os.path.exists(path):
         with open(path, "wb") as f:
             f.write(data)
