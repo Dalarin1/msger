@@ -10,6 +10,7 @@ services:
     volumes:
       - ./database:/msger/database
       - ./attachments:/msger/attachments
+      - ./chat/migrations:/msger/migrations
   voice:
     build: ./voice
     ports:

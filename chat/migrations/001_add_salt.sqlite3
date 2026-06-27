@@ -1,0 +1,20 @@
+PRAGMA foreign_keys = OFF;
+
+DROP TABLE IF EXISTS members_new;
+
+CREATE TABLE members_new (
+    id TEXT PRIMARY KEY,
+    password_hash TEXT NOT NULL,
+    name TEXT NOT NULL UNIQUE,
+    salt TEXT NOT NULL DEFAULT '',
+    created_at TEXT
+);
+
+INSERT INTO members_new (id, password_hash, name, created_at)
+SELECT id, password_hash, name, created_at FROM members;
+
+DROP TABLE members;
+
+ALTER TABLE members_new RENAME TO members;
+
+PRAGMA foreign_keys = ON;
