@@ -122,7 +122,9 @@ def make_environ() -> None:
     with open(MAKE_TABLES_SCRIPT_PATH, "r") as script_file:
         script = script_file.read()
     cursor.executescript(script)
-    run_migration(cursor, conn)
+    
+    if db_schema_changed(cursor, script):
+        run_migration(cursor, conn)
 
         
     conn.commit()
@@ -548,7 +550,12 @@ async def refresh_tokens(
     _type = payload.get("type")
 
     if not _type or _type != "refresh" or user_id is None:
-        raise HTTPException(401, "Invalid token")
+        if not _type:
+            raise HTTPException(401, "Invalid token: \"type\" not set")
+        if _type != "refresh":
+            raise HTTPException(401, "Invalid token: \"type\" != \"refresh\"")
+        if user_id is None:
+            raise HTTPException(401, "Invalid token: \"user_id\" aka \"sub\" not set")
 
     row = cursor.execute(
         "SELECT expires_at, revoked FROM refresh_tokens WHERE jti = ?", (jti,)
