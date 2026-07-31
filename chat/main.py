@@ -23,6 +23,7 @@ from fastapi import (
     UploadFile,
     File,
 )
+from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.exceptions import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -937,4 +938,5 @@ async def upload_file(
 
 if __name__ == "__main__":
     make_environ()
+    app.mount("/static", StaticFiles(directory="static"), name="static")
     uvicorn.run(app, host="0.0.0.0", port=80)

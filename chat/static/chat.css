@@ -1,0 +1,130 @@
+
+
+.screen { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+.screen.active { display: flex; }
+
+/* ── list ── */
+#listScreen .toolbar {
+    display: flex;
+    gap: 8px;
+    padding: 12px 20px;
+    background: white;
+    border-bottom: 1px solid #e5e7eb;
+}
+#listScreen .toolbar input {
+    flex: 1;
+    padding: 9px 14px;
+    border: 1px solid #ddd;
+    border-radius: 20px;
+    font-family: system-ui, sans-serif;
+    font-size: 14px;
+    outline: none;
+}
+#listScreen .toolbar input:focus { border-color: #111; }
+#listScreen .toolbar button {
+    background: black;
+    color: white;
+    border: none;
+    padding: 0 16px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 14px;
+    font-family: system-ui, sans-serif;
+}
+#listScreen .toolbar button:hover { opacity: .9; }
+
+#chatList { flex: 1; overflow-y: auto; }
+
+.chat-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 20px;
+    background: white;
+    border-bottom: 1px solid #e5e7eb;
+    cursor: pointer;
+}
+.chat-item:hover { background: #f9f9f9; }
+
+.avatar {
+    width: 40px; height: 40px; border-radius: 50%;
+    background: #e5e7eb;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 600; font-size: 14px; color: #555;
+    flex-shrink: 0; text-transform: uppercase;
+}
+
+.chat-info { flex: 1; min-width: 0; }
+.chat-name { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chat-preview { font-size: 12px; color: #999; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+.chat-time { font-size: 11px; color: #aaa; flex-shrink: 0; align-self: flex-start; margin-top: 2px; }
+
+.empty-state { padding: 40px 20px; text-align: center; color: #aaa; font-size: 13px; }
+
+/* ── chat bubbles ── */
+#messages {
+    flex: 1; overflow-y: auto;
+    padding: 10px 16px;
+    display: flex; flex-direction: column; gap: 2px;
+}
+/* Группировка: если подряд идут сообщения одного отправителя — схлопываем отступы */
+.msg-wrap { display: flex; width: 100%; }
+.msg-wrap.mine   { justify-content: flex-end; }
+.msg-wrap.theirs { justify-content: flex-start; }
+.msg-wrap + .msg-wrap.mine.prev-mine     { margin-top: 1px; }
+.msg-wrap + .msg-wrap.theirs.prev-theirs { margin-top: 1px; }
+.msg-wrap.group-start { margin-top: 10px; }
+
+.bubble {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 14px;
+    padding: 8px 14px;
+    max-width: 700px;
+}
+
+.mine   .bubble { background: #111; color: white; border-bottom-right-radius: 4px; }
+.theirs .bubble { background: white; border: 1px solid #e5e7eb; color: #111; border-bottom-left-radius: 4px; }
+
+/* Мета (имя + время) показываем только у первого в группе */
+.bubble-meta {
+    font-size: 10px;
+    margin-top: 2px;
+    opacity: .5;
+}
+.mine   .bubble-meta { text-align: right; }
+.theirs .bubble-meta { text-align: left; }
+.hide-meta .bubble-meta { display: none; }
+
+/* ── modal ── */
+#modal {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.4);
+    display: none; align-items: center; justify-content: center;
+    z-index: 100;
+}
+#modal.open { display: flex; }
+.modal-box {
+    background: white; border-radius: 16px;
+    padding: 24px; width: 100%; max-width: 380px; margin: 16px;
+    display: flex; flex-direction: column; gap: 14px;
+}
+.modal-box h3 { font-size: 16px; }
+.modal-box label { font-size: 13px; color: #555; display: block; margin-bottom: 6px; }
+.modal-box input {
+    width: 100%; padding: 10px 14px;
+    border: 1px solid #ddd; border-radius: 10px;
+    font-family: system-ui, sans-serif; font-size: 14px; outline: none;
+}
+.modal-box input:focus { border-color: #111; }
+.modal-error { font-size: 13px; color: #e53e3e; display: none; }
+.modal-actions { display: flex; gap: 8px; }
+.modal-actions button {
+    flex: 1; border: none; border-radius: 10px;
+    padding: 10px; cursor: pointer;
+    font-family: system-ui, sans-serif; font-size: 14px;
+}
+.btn-cancel { background: #f3f4f6; color: #333; }
+.btn-open   { background: black; color: white; flex: 2; }
+.btn-cancel:hover { background: #e5e7eb; }
+.btn-open:hover   { opacity: .9; }

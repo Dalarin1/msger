@@ -1,0 +1,205 @@
+/* ============================================================
+   common.css — общие стили для всех страниц Oleg Chat
+   (nav, topbar, auth-overlay, input bar, вложения, pending-чипы)
+   ============================================================ */
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: system-ui, sans-serif;
+    height: 100vh;
+    display: flex;
+}
+
+/* ── навигация ── */
+nav {
+    width: 200px;
+    background: white;
+    border-right: 1px solid #e5e7eb;
+    display: flex;
+    flex-direction: column;
+    padding: 20px 0;
+    flex-shrink: 0;
+}
+nav .logo { font-size: 16px; font-weight: 700; padding: 0 20px 20px; border-bottom: 1px solid #e5e7eb; margin-bottom: 8px; }
+nav a { display: block; padding: 10px 20px; text-decoration: none; color: #555; font-size: 14px; transition: background .12s, color .12s; }
+nav a:hover { background: #f3f4f6; color: #111; }
+nav a.active { background: #f3f4f6; color: #111; font-weight: 600; }
+
+main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+/* ── шапка ── */
+.topbar {
+    background: white;
+    border-bottom: 1px solid #e5e7eb;
+    padding: 14px 20px;
+    font-weight: 600;
+    font-size: 15px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.topbar span { font-size: 12px; color: #999; font-weight: 400; }
+
+/* ── вложения (общая часть: картинки/видео/файлы-ссылки) ── */
+.attachments {
+    margin-top: 5px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+.attachment-link,
+.attachment-file {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    color: #4f46e5;
+    text-decoration: none;
+    padding: 2px 0;
+    opacity: .85;
+}
+.attachment-link:hover,
+.attachment-file:hover { opacity: 1; text-decoration: underline; }
+.attachment-link .icon { font-size: 14px; flex-shrink: 0; }
+.attachment-image { max-width: 100%; }
+.attachment-video { max-width: 100%; }
+
+/* ── прикреплённые файлы перед отправкой (pending) ── */
+#pendingFiles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 20px 0;
+    background: white;
+}
+.pending-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    border-radius: 20px;
+    padding: 4px 10px 4px 8px;
+    font-size: 12px;
+    color: #333;
+}
+.pending-chip .remove {
+    cursor: pointer;
+    color: #999;
+    font-size: 14px;
+    line-height: 1;
+    background: none;
+    border: none;
+    padding: 0;
+}
+.pending-chip .remove:hover { color: #111; }
+
+/* ── статус загрузки файла ── */
+#uploadStatus {
+    font-size: 12px;
+    color: #888;
+    padding: 2px 20px 6px;
+    background: white;
+    display: none;
+}
+
+/* ── нижняя панель ввода сообщения ── */
+#inputBar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    border-top: 1px solid #e5e7eb;
+    background: white;
+}
+
+#attachBtn,
+#recordVM {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 20px;
+    line-height: 1;
+    color: #888;
+    padding: 4px;
+    border-radius: 8px;
+    transition: color .12s, background .12s;
+    flex-shrink: 0;
+}
+#attachBtn:hover,
+#recordVM:hover { color: #111; background: #f3f4f6; }
+#recordVM.recording { color: #e53e3e; }
+#fileInput { display: none; }
+
+#sendBtn {
+    background: black; color: white; border: none;
+    padding: 0 18px; height: 38px; border-radius: 20px; cursor: pointer;
+    font-size: 14px; font-family: system-ui, sans-serif;
+    flex-shrink: 0;
+}
+#sendBtn:hover { opacity: .9; }
+
+/* ── модальное окно "нужен аккаунт" ── */
+#authOverlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.35);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 200;
+    align-items: center; justify-content: center;
+}
+#authOverlay.visible { display: flex; }
+#authCard {
+    background: white; border: 1px solid #e5e7eb;
+    border-radius: 16px; padding: 28px 32px;
+    width: 320px; display: flex; flex-direction: column; gap: 16px;
+    position: relative;
+}
+#authCard .close-btn {
+    position: absolute; top: 14px; right: 16px;
+    background: none; border: none; font-size: 18px;
+    color: #999; cursor: pointer; padding: 2px 6px; border-radius: 6px;
+}
+#authCard .close-btn:hover { background: #f3f4f6; color: #111; }
+#authCard h2 { font-size: 16px; font-weight: 700; color: #111; margin-right: 24px; }
+#authCard p  { font-size: 14px; color: #555; line-height: 1.5; }
+.auth-btn {
+    display: block; text-align: center; padding: 10px;
+    border-radius: 20px; font-size: 14px; font-family: system-ui, sans-serif;
+    font-weight: 600; cursor: pointer; text-decoration: none; transition: opacity .12s;
+}
+.auth-btn.primary   { background: black; color: white; border: none; }
+.auth-btn.secondary { background: white; color: #111; border: 1px solid #e5e7eb; }
+.auth-btn:hover { opacity: .82; }
+
+/* ── модальное окно "нет доступа к микрофону" ── */
+#micDeniedOverlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.4);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 300;
+}
+#micDeniedOverlay .box {
+    background: white; border-radius: 16px; padding: 24px;
+    max-width: 340px; margin: 16px;
+    display: flex; flex-direction: column; gap: 12px;
+}
+#micDeniedOverlay h3 { font-size: 16px; }
+#micDeniedOverlay p  { font-size: 14px; color: #555; line-height: 1.5; }
+#micDeniedOverlay button {
+    background: black; color: white; border: none; border-radius: 10px;
+    padding: 10px; cursor: pointer; font-family: system-ui, sans-serif; font-size: 14px;
+}
+
+#textInput {
+    flex: 1;
+    padding: 9px 14px;
+    border-radius: 20px;
+    border: 1px solid #ddd;
+    outline: none;
+    font-family: system-ui, sans-serif;
+    font-size: 14px;
+}
+#textInput:focus { border-color: #111; }
