@@ -2,3 +2,5 @@
 /attachments/**
 !.gitignore
 !.gitkeep
+*pycache*
+.env

@@ -5,11 +5,12 @@ import hashlib
 import sqlite3
 import uuid
 import jwt
-import os
-
+from config import *
 from hashlib import sha256
 from typing import Literal
 from urllib.parse import quote
+from alembic.config import Config
+from alembic import command
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -30,56 +31,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 #    CONFIG
-SECRET_KEY = os.environ.get("SECRET_KEY", "change_me_in_production_please_for_32+_char_password")
-PEPPER_KEY = os.environ.get("PEPPER_KEY", "change_me_in_production_please")
-ALGORITHM = "HS256"
-ACCESS_TOKEN_TTL = timedelta(minutes=15)
-REFRESH_TOKEN_TTL = timedelta(days=30)
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATABASE_FOLDER = os.path.join(BASE_DIR, "database")
-MIGRATIONS_FLD = os.path.join(BASE_DIR, "migrations")
-DB_PATH = os.path.join(DATABASE_FOLDER, "app.db")
-MAKE_TABLES_SCRIPT_PATH = os.path.join(BASE_DIR, "make_tables.sqlite3")
-STATIC_FILES_FLD = os.path.join(BASE_DIR, "static")
-
-ATTACHEMENTS_FLD = os.path.join(BASE_DIR, "attachments")
-USER_IMAGES_FLD = os.path.join(ATTACHEMENTS_FLD, "images")
-USER_AUDIO_FLD = os.path.join(ATTACHEMENTS_FLD, "audios")
-USER_VIDEO_FLD = os.path.join(ATTACHEMENTS_FLD, "videos")
-USER_FILES_FLD = os.path.join(ATTACHEMENTS_FLD, "others")
-
-MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10 МБ
-MAX_AUDIO_SIZE = 30 * 1024 * 1024  # 30 МБ
-MAX_VIDEO_SIZE = 100 * 1024 * 1024  # 100 МБ
-MAX_FILE_SIZE = 500 * 1024 * 1024  # 500 МБ
-
-ALLOWED_EXTENSIONS = {
-    "image": {".jpg", ".jpeg", ".png", ".gif", ".jfif", ".webp", ".svg"},
-    "video": {".mp4", ".webm"},
-    "audio": {".mp3", ".wav", ".ogg"},
-}
-
-MAX_SIZES = {
-    "image": MAX_IMAGE_SIZE,
-    "video": MAX_VIDEO_SIZE,
-    "audio": MAX_AUDIO_SIZE,
-    "file": MAX_FILE_SIZE,
-}
-
-FOLDERS = {
-    "image": USER_IMAGES_FLD,
-    "video": USER_VIDEO_FLD,
-    "audio": USER_AUDIO_FLD,
-    "file": USER_FILES_FLD,
-}
-
-URL_PREFIXES = {
-    "image": "/img",
-    "video": "/video",
-    "audio": "/audio",
-    "file": "/file",
-}
 
 limiter = Limiter(key_func=get_remote_address)
 app = fastapi.FastAPI()
@@ -99,6 +51,13 @@ conn: sqlite3.Connection
 cursor: sqlite3.Cursor
 
 
+def run_alembic_migrations() -> None:
+    cfg = Config(ALEMBIC_INI)
+    cfg.set_main_option("script_location", os.path.join(BASE_DIR, "alembic"))
+    cfg.set_main_option("sqlalchemy.url", f"sqlite:///{DB_PATH}")
+    command.upgrade(cfg, "head")
+
+
 def make_environ() -> None:
     global conn, cursor
 
@@ -106,103 +65,22 @@ def make_environ() -> None:
         os.system("")
 
     os.makedirs(DATABASE_FOLDER, exist_ok=True)
-    os.makedirs(MIGRATIONS_FLD, exist_ok=True)
     os.makedirs(USER_IMAGES_FLD, exist_ok=True)
     os.makedirs(USER_AUDIO_FLD, exist_ok=True)
     os.makedirs(USER_VIDEO_FLD, exist_ok=True)
     os.makedirs(USER_FILES_FLD, exist_ok=True)
+
+    run_alembic_migrations() 
 
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA foreign_keys=ON")
-
     cursor = conn.cursor()
-
-    with open(MAKE_TABLES_SCRIPT_PATH, "r") as script_file:
-        script = script_file.read()
-    cursor.executescript(script)
-    
-    if db_schema_changed(cursor, script):
-        run_migration(cursor, conn)
-
-        
     conn.commit()
 
-
-def db_schema_changed(cursor:sqlite3.Cursor, script:str) -> bool:
-    return _parse_expected_schema(script) != _get_actual_schema(cursor)
-
-
-def _parse_expected_schema(script: str) -> dict[str, set[str]]:
-    tmp = sqlite3.connect(":memory:")
-    tmp.executescript(script)
-    
-    tables = {}
-    rows = tmp.execute(
-        "SELECT name FROM sqlite_master WHERE type='table'"
-    ).fetchall()
-    
-    for (table_name,) in rows:
-        cols = tmp.execute(f"PRAGMA table_info({table_name})").fetchall()
-        tables[table_name] = {col[1] for col in cols}
-    
-    tmp.close()
-    return tables
-
-def _get_actual_schema(cursor: sqlite3.Cursor) -> dict[str, set[str]]:
-    """Читает реальную структуру из sqlite_master"""
-    tables = {}
-    rows = cursor.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE '\\_%' ESCAPE '\\';"
-    ).fetchall()
-    for row in rows:
-        table_name = row[0]
-        cols = cursor.execute(f"PRAGMA table_info({table_name})").fetchall()
-        tables[table_name] = {col[1] for col in cols}  # col[1] — имя колонки
-    return tables
-
-
-def _get_db_version(cursor: sqlite3.Cursor) -> int:
-    cursor.executescript("CREATE TABLE IF NOT EXISTS _schema_version (version INTEGER NOT NULL);")
-    
-    row = cursor.execute("SELECT version FROM _schema_version").fetchone()
-
-    return row["version"] if row else 0
-
-def _set_db_version(cursor: sqlite3.Cursor, version: int) -> None:
-    cursor.execute("DELETE FROM _schema_version")
-    cursor.execute("INSERT INTO _schema_version (version) VALUES (?)", (version,))
-
-
-def run_migration(cursor: sqlite3.Cursor, conn: sqlite3.Connection):
-    """
-    Version naming: 
-    <version_before>_to_<version_to>_[optional_description].sqlite3
-    """
-    curversion = _get_db_version(cursor)
-
-    # Собираем все файлы миграций и сортируем по номеру
-    files = sorted(
-        f for f in os.listdir(MIGRATIONS_FLD) if f.endswith(".sqlite3") or f.endswith(".sql")
-    )
-    for filename in files:
-        version = int(filename.split("_")[0])  # "002_add_avatar..." -> 2
-        if version <= curversion:
-            continue
-
-        path = os.path.join(MIGRATIONS_FLD, filename)
-        with open(path) as f:
-            cursor.executescript(f.read())
-
-        _set_db_version(cursor, version)
-        curversion = version
-        conn.commit()
-
-
 # ── JWT ───────────────────────────────────────────────────────────────────
-
 
 def _now_utc() -> datetime:
     return datetime.now(tz=timezone.utc)
@@ -938,5 +816,5 @@ async def upload_file(
 
 if __name__ == "__main__":
     make_environ()
-    app.mount("/static", StaticFiles(directory="static"), name="static")
+    app.mount("/static", StaticFiles(directory=STATIC_FILES_FLD), name="static")
     uvicorn.run(app, host="0.0.0.0", port=80)

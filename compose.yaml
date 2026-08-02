@@ -7,10 +7,11 @@ services:
     ports:
       - "80:80"
     restart: unless-stopped
+    environment:
+      - DB_PATH=/msger/database/app.db
     volumes:
       - ./database:/msger/database
       - ./attachments:/msger/attachments
-      - ./chat/migrations:/msger/migrations
   voice:
     build: ./voice
     ports:
